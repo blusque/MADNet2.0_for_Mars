@@ -9,14 +9,16 @@ class MergeLayer(nn.Module):
         super(MergeLayer, self).__init__()
         self.h_layer = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1),
-            nn.LeakyReLU(1e-2)
+            nn.LeakyReLU(1e-2, inplace=True)
         )
         self.i_layer = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1),
-            nn.LeakyReLU(1e-2)
+            nn.LeakyReLU(1e-2, inplace=True)
         )
 
     def forward(self, x_h, x_i):
+        # print(x_h.shape)
+        # print(x_i.shape)
         output_h = self.h_layer(x_h)
         output_i = self.i_layer(x_i)
         output = torch.cat((output_h, output_i), 1)
@@ -31,7 +33,7 @@ class ConvBlock_(nn.Module):
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1),
             nn.BatchNorm2d(out_channels),
-            nn.LeakyReLU(1e-2)
+            nn.LeakyReLU(1e-2, inplace=True)
         )
 
     def forward(self, x):
@@ -55,17 +57,19 @@ class Discriminator(nn.Module):
             ConvBlock_(256, 512),
             ConvBlock_(512, 512, 2)
         )
-        self.fc1 = nn.Linear(512 * 16 * 16, 200)
-        self.lrelu = nn.LeakyReLU(1e-2)
+        self.fc1 = nn.Linear(512 * 32 * 32, 200)
+        self.lrelu = nn.LeakyReLU(1e-2, inplace=True)
         self.fc2 = nn.Linear(200, 1)
 
     def forward(self, x_h, x_i):
+        # print("x_h size: ", x_h.shape)
+        # print("x_i size: ", x_i.shape)
         merged = self.merge(x_h, x_i)
-        print(merged.shape)
+        # print(merged.shape)
         output = self.convs(merged)
-
-        output = output.view(-1, 512 * 16 * 16)
-        print(output.shape)
+        # print(output.shape)
+        output = output.view(-1, 512 * 32 * 32)
+        # print(output.shape)
         vector1 = self.fc1(output)
         relu = self.lrelu(vector1)
         result = self.fc2(relu)

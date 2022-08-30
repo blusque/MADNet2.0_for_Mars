@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.autograd import Variable
 import numpy as np
+import time
 
 
 class GradientLoss(nn.Module):
@@ -49,17 +51,14 @@ class BerhuLoss(nn.Module):
         c = delta.shape[1]
         row = 0
         col = 0
-        for i in range(n):
-            for j in range(c):
-                while row < delta.shape[-2]:
-                    delta[i, j, row, col] = delta[i, j, row, col] ** 2
-                    col += 1
-                    if col == delta.shape[-1]:
-                        col = 0
-                        row += 1
+        result = Variable(torch.cuda.FloatTensor(delta.shape))
+        start = time.time()
+        result = delta * delta
+        end = time.time()
+        # print("bh loss loop cost: {}s".format(end - start))
         if self.reduction == 'none':
-            return delta
+            return result
         elif self.reduction == 'mean':
-            return torch.mean(delta)
+            return torch.mean(result)
         elif self.reduction == 'sum':
-            return torch.sum(delta)
+            return torch.sum(result)
