@@ -1,2 +1,3 @@
 .dem_image/
 ./training_dataset.hdf5
+.idea/
