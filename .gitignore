@@ -1,3 +1,5 @@
 .dem_image/
 ./training_dataset.hdf5
 .idea/
+MADNet/__pycache__/
+
