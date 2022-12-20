@@ -1,0 +1,6 @@
+.idea/
+MADNet/__pycache__/
+MADNet/model/__pycache__/
+MADNet/model/.ipynb_checkpoints/
+MADNet.zip
+checkpoint/
