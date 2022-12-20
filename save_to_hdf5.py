@@ -55,7 +55,6 @@ for file in zip(dtm_lists, ori_lists):
     ori_file = os.path.join(ori_path, file[1])
     dtm = io.imread(dtm_file, plugin='pil')
     ori = io.imread(ori_file, plugin='pil')
-    ori = cv.cvtColor(ori, cv.COLOR_RGB2GRAY)
     dtm_dataset[img_index, ...] = dtm
     ori_dataset[img_index, ...] = ori
     img_index += 1
