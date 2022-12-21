@@ -4,13 +4,16 @@ import random
 import torch
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from torch.nn import DataParallel
 import torch.backends.cudnn as cudnn
+import matplotlib.pyplot as plt
 
 from dataset import DEMDataset
 from model.generator import Generator
 from model.discriminator import Discriminator
 from model.loss_function import *
+from validate import Validator
 
 import argparse
 
@@ -126,6 +129,13 @@ def train(data_loader, optimizer, model, criterion, epoch):
 
     Tensor = torch.cuda.FloatTensor if opt.cuda and torch.cuda.is_available() else torch.FloatTensor
     # print(Tensor)
+    err = 0
+    rse = 0
+    ssim = 0
+    dis_loss_val = 0
+    gen_loss_val = 0
+    last_iteration = 0
+    writer = SummaryWriter('./log')
 
     torch.autograd.set_detect_anomaly(True)
     for iteration, batch in enumerate(data_loader, 1):
@@ -155,6 +165,7 @@ def train(data_loader, optimizer, model, criterion, epoch):
 
         gen_loss = 0.5 * g_loss(dtm, gen_dtm) + 5e-2 * bh_loss(dtm, gen_dtm) \
                    + 5e-3 * a_loss(fake_predict - real_predict.mean(0, keepdim=True), valid)
+        gen_loss_val += gen_loss.item()
         # + bh_loss(dtm, gen_dtm) + a_loss(fake_predict
         #                                 - real_predict.mean(0, keepdim=True), valid)
 
@@ -176,14 +187,44 @@ def train(data_loader, optimizer, model, criterion, epoch):
         d_loss = (real_loss + fake_loss) / 2
 
         dis_loss = 0.5 * g_loss(dtm, gen_dtm.detach()) + 5e-2 * bh_loss(dtm, gen_dtm.detach()) + 5e-3 * d_loss
-
+        dis_loss_val += dis_loss.item()
+        
         dis_loss.backward()
         dis_optimizer.step()
+        
+        np_dtm = dtm.copy().detach().numpy()
+        np_gen_dtm = gen_dtm.copy().detach().numpy()
+        
+        val = Validator(np_dtm, np_gen_dtm)
+        rse, ssim += val.validate()
+        err += rse + ssim
+        
+        if iteration == 0:
+            writer.add_images('ground_truth', dtm, epoch, dataformats='NCHW')
+            writer.add_images('predicted', gen_dtm, epoch, dataformats='NCHW')
 
         print(
             "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
             % (epoch, opt.nEpochs, iteration, len(data_loader), dis_loss.item(), gen_loss.item())
         )
+        last_iteration = iteration
+    err /= float(last_iteration)
+    rse /= float(last_iteration)
+    ssim /= float(last_iteration)
+    dis_loss_val /= float(last_iteration)
+    gen_loss_val /= float(last_iteration)
+    plt.plot(epoch, err, c='r', label='err')
+    plt.plot(epoch, rse, c='g', label='rse')
+    plt.plot(epoch, ssim, c='b', label='ssim')
+    plt.xlabel('epoch')
+    plt.legend()
+    plt.draw()
+    plt.savefig('./img/epoch_{}.png'.format(epoch))
+    writer.add_scalar('rse', rse / last_iteration, epoch)
+    writer.add_scalar('ssim', ssim / last_iteration, epoch)
+    writer.add_scalar('err', err / last_iteration, epoch)
+    writer.add_scalar('dis_loss', dis_loss_val / last_iteration, epoch)
+    writer.add_scalar('gen_loss', gen_loss_val / last_iteration, epoch)
 
 
 def save_checkpoint(model, epoch):
@@ -210,6 +251,11 @@ def save_checkpoint(model, epoch):
     torch.save(dis_state, dis_model_out_path)
 
     print("Checkpoint saved to {}&{}".format(gen_model_out_path, dis_model_out_path))
+    
+    
+def validate(dtm, gen_dtm):
+    val = Validator(dtm, gen_dtm)
+    err = val
 
 
 if __name__ == '__main__':

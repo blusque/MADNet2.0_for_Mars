@@ -78,24 +78,24 @@ class Validator:
         ssim = 0.
         for i in range(channels):
             gt = self.gt[i, 0, :, :]
-            io.imshow(gt)
-            plt.show()
+            # io.imshow(gt)
+            # plt.show()
             predicted = self.predicted[i, 0, :, :]
-            io.imshow(predicted)
-            plt.show()
+            # io.imshow(predicted)
+            # plt.show()
             rse += compute_rse(gt, predicted)
             ssim += compute_ssim(gt, predicted)
-            gt_relief = hill_shade(gt, z_factor=1.0)
-            predicted_relief = hill_shade(predicted, z_factor=1.0)
-            io.imshow(gt_relief)
-            plt.show()
-            io.imshow(predicted_relief)
-            plt.show()
+            # gt_relief = hill_shade(gt, z_factor=1.0)
+            # predicted_relief = hill_shade(predicted, z_factor=1.0)
+            # io.imshow(gt_relief)
+            # plt.show()
+            # io.imshow(predicted_relief)
+            # plt.show()
         rse /= channels
-        print(rse)
+        # print(rse)
         ssim /= channels
-        print(ssim)
-        return rse + ssim
+        # print(ssim)
+        return rse, ssim
 
 
 if __name__ == "__main__":
@@ -128,7 +128,8 @@ if __name__ == "__main__":
             print('gen_dtm {} mean: {}, var: {}'.format(i, gen_dtm[i].mean(), gen_dtm[i].var()))
 
         val = Validator(dtm, gen_dtm)
-        err += val.validate()
+        rse, ssim = val.validate()
+        err += rse + ssim;
         print("total: 100; now: {}".format(iteration * batch_size))
         break
     # err /= batch_size
