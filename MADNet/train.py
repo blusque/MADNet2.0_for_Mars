@@ -42,10 +42,12 @@ def main():
     print(device)
 
     cuda = opt.cuda
+    if torch.cuda.is_available():
+        print("Let's use", torch.cuda.device_count(), "GPUs!")
     if cuda and not torch.cuda.is_available():
         raise Exception("No GPU found, please run without --cuda")
 
-    gpus = [0]
+    gpus = [0, 1]
     opt.seed = random.randint(1, 10000)
     print("Random seed: ", opt.seed)
     torch.manual_seed(opt.seed)
@@ -55,8 +57,8 @@ def main():
     cudnn.benchmark = True
 
     print("===> Loading datasets")
-    train_set = DEMDataset("/media/mei/Elements/training_dataset.hdf5")
-    # train_set = DEMDataset("../training_dataset.hdf5")
+    # train_set = DEMDataset("/media/mei/Elements/training_dataset.hdf5")
+    train_set = DEMDataset("../data/training_dataset.hdf5")
     training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize,
                                       shuffle=True)
 
@@ -140,10 +142,10 @@ def train(data_loader, optimizer, model, criterion, epoch):
     torch.autograd.set_detect_anomaly(True)
     for iteration, batch in enumerate(data_loader, 1):
         dtm, ori = batch
-        print("dtm shape before unsqueezed: ", dtm.shape)
+        # print("dtm shape before unsqueezed: ", dtm.shape)
         dtm = torch.unsqueeze(dtm, 1)
         ori = torch.unsqueeze(ori, 1)
-        print("dtm shape after unsqueezed: ", dtm.shape)
+        # print("dtm shape after unsqueezed: ", dtm.shape)
         dtm = dtm.to(device)
         ori = ori.to(device)
 
@@ -192,12 +194,14 @@ def train(data_loader, optimizer, model, criterion, epoch):
         dis_loss.backward()
         dis_optimizer.step()
         
-        np_dtm = dtm.copy().detach().numpy()
-        np_gen_dtm = gen_dtm.copy().detach().numpy()
+        np_dtm = dtm.cpu().clone().detach().numpy()
+        np_gen_dtm = gen_dtm.cpu().clone().detach().numpy()
         
         val = Validator(np_dtm, np_gen_dtm)
-        rse, ssim += val.validate()
-        err += rse + ssim
+        nrse, nssim = val.validate()
+        rse += nrse
+        ssim += ssim
+        err += nrse + nssim
         
         if iteration == 0:
             writer.add_images('ground_truth', dtm, epoch, dataformats='NCHW')
@@ -251,11 +255,6 @@ def save_checkpoint(model, epoch):
     torch.save(dis_state, dis_model_out_path)
 
     print("Checkpoint saved to {}&{}".format(gen_model_out_path, dis_model_out_path))
-    
-    
-def validate(dtm, gen_dtm):
-    val = Validator(dtm, gen_dtm)
-    err = val
 
 
 if __name__ == '__main__':

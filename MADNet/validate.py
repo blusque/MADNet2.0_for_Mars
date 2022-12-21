@@ -1,12 +1,12 @@
 import torch.nn
 import numpy as np
-from skimage import io
-import matplotlib.pyplot as plt
+# from skimage import io
+# import matplotlib.pyplot as plt
 from scipy.signal import convolve2d
 from model.generator import Generator
 from dataset import DEMDataset
 from torch.utils.data import DataLoader
-from hill_shade import hill_shade
+# from hill_shade import hill_shade
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
