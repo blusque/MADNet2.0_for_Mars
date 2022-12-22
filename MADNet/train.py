@@ -47,7 +47,7 @@ def main():
     if cuda and not torch.cuda.is_available():
         raise Exception("No GPU found, please run without --cuda")
 
-    gpus = [0, 1]
+    gpus = [0, 1, 2]
     opt.seed = random.randint(1, 10000)
     print("Random seed: ", opt.seed)
     torch.manual_seed(opt.seed)
@@ -58,7 +58,7 @@ def main():
 
     print("===> Loading datasets")
     # train_set = DEMDataset("/media/mei/Elements/training_dataset.hdf5")
-    train_set = DEMDataset("../data/training_dataset.hdf5")
+    train_set = DEMDataset("../../data/training_dataset.hdf5")
     training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize,
                                       shuffle=True)
 
@@ -136,16 +136,19 @@ def train(data_loader, optimizer, model, criterion, epoch):
     ssim = 0
     dis_loss_val = 0
     gen_loss_val = 0
-    last_iteration = 0
     writer = SummaryWriter('./log')
 
     torch.autograd.set_detect_anomaly(True)
     for iteration, batch in enumerate(data_loader, 1):
+        if iteration > 100:
+            break
         dtm, ori = batch
-        # print("dtm shape before unsqueezed: ", dtm.shape)
+        dtm = dtm / 255.
+        ori = ori / 255.
+        # print("ori shape before unsqueezed: ", ori.shape)
         dtm = torch.unsqueeze(dtm, 1)
         ori = torch.unsqueeze(ori, 1)
-        # print("dtm shape after unsqueezed: ", dtm.shape)
+        # print("ori shape after unsqueezed: ", ori.shape)
         dtm = dtm.to(device)
         ori = ori.to(device)
 
@@ -167,7 +170,6 @@ def train(data_loader, optimizer, model, criterion, epoch):
 
         gen_loss = 0.5 * g_loss(dtm, gen_dtm) + 5e-2 * bh_loss(dtm, gen_dtm) \
                    + 5e-3 * a_loss(fake_predict - real_predict.mean(0, keepdim=True), valid)
-        gen_loss_val += gen_loss.item()
         # + bh_loss(dtm, gen_dtm) + a_loss(fake_predict
         #                                 - real_predict.mean(0, keepdim=True), valid)
 
@@ -189,53 +191,30 @@ def train(data_loader, optimizer, model, criterion, epoch):
         d_loss = (real_loss + fake_loss) / 2
 
         dis_loss = 0.5 * g_loss(dtm, gen_dtm.detach()) + 5e-2 * bh_loss(dtm, gen_dtm.detach()) + 5e-3 * d_loss
-        dis_loss_val += dis_loss.item()
         
         dis_loss.backward()
         dis_optimizer.step()
         
-        np_dtm = dtm.cpu().clone().detach().numpy()
-        np_gen_dtm = gen_dtm.cpu().clone().detach().numpy()
-        
-        val = Validator(np_dtm, np_gen_dtm)
-        nrse, nssim = val.validate()
-        rse += nrse
-        ssim += ssim
-        err += nrse + nssim
-        
-        if iteration == 0:
-            writer.add_images('ground_truth', dtm, epoch, dataformats='NCHW')
-            writer.add_images('predicted', gen_dtm, epoch, dataformats='NCHW')
+        if iteration % 5 == 0:
+            writer.add_images('ground_truth', dtm, epoch * iteration + iteration, dataformats='NCHW')
+            writer.add_images('ori', ori, epoch * iteration + iteration, dataformats='NCHW')
+            writer.add_images('predicted', gen_dtm, epoch * iteration + iteration, dataformats='NCHW')
 
+        # print(
+        #     "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
+        #     % (epoch, opt.nEpochs, iteration, len(data_loader), dis_loss.item(), gen_loss.item())
+        # )
         print(
             "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-            % (epoch, opt.nEpochs, iteration, len(data_loader), dis_loss.item(), gen_loss.item())
+            % (epoch, opt.nEpochs, iteration, 10, dis_loss.item(), gen_loss.item())
         )
-        last_iteration = iteration
-    err /= float(last_iteration)
-    rse /= float(last_iteration)
-    ssim /= float(last_iteration)
-    dis_loss_val /= float(last_iteration)
-    gen_loss_val /= float(last_iteration)
-    plt.plot(epoch, err, c='r', label='err')
-    plt.plot(epoch, rse, c='g', label='rse')
-    plt.plot(epoch, ssim, c='b', label='ssim')
-    plt.xlabel('epoch')
-    plt.legend()
-    plt.draw()
-    plt.savefig('./img/epoch_{}.png'.format(epoch))
-    writer.add_scalar('rse', rse / last_iteration, epoch)
-    writer.add_scalar('ssim', ssim / last_iteration, epoch)
-    writer.add_scalar('err', err / last_iteration, epoch)
-    writer.add_scalar('dis_loss', dis_loss_val / last_iteration, epoch)
-    writer.add_scalar('gen_loss', gen_loss_val / last_iteration, epoch)
 
 
 def save_checkpoint(model, epoch):
     gen_model, dis_model = model
-    model_folder = "checkpoint/"
-    gen_model_folder = "checkpoint/gen/"
-    dis_model_folder = "checkpoint/dis/"
+    model_folder = "../checkpoint/"
+    gen_model_folder = "../checkpoint/gen/"
+    dis_model_folder = "../checkpoint/dis/"
     model_out_path = model_folder + 'model_epoch_{}.pth'.format(epoch)
     gen_model_out_path = gen_model_folder + "gen_model_epoch_{}.pth".format(epoch)
     dis_model_out_path = dis_model_folder + "dis_model_epoch_{}.pth".format(epoch)
@@ -254,7 +233,7 @@ def save_checkpoint(model, epoch):
     torch.save(gen_state, gen_model_out_path)
     torch.save(dis_state, dis_model_out_path)
 
-    print("Checkpoint saved to {}&{}".format(gen_model_out_path, dis_model_out_path))
+    print("Checkpoint saved to {} & {}".format(gen_model_out_path, dis_model_out_path))
 
 
 if __name__ == '__main__':

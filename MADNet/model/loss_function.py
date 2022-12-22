@@ -47,14 +47,15 @@ class BerhuLoss(nn.Module):
     def forward(self, gt, est):
         delta = torch.abs(gt - est)
         self.tao = 0.2 * torch.max(delta)
-        n = delta.shape[0]
-        c = delta.shape[1]
-        row = 0
-        col = 0
+        # n = delta.shape[0]
+        # c = delta.shape[1]
+        # row = 0
+        # col = 0
         result = Variable(torch.cuda.FloatTensor(delta.shape))
-        start = time.time()
-        result = delta * delta
-        end = time.time()
+        # start = time.time()
+        result = torch.where(delta <= self.tao, delta, 
+                             0.5 * delta ** 2 / self.tao + 0.5 * self.tao)
+        # end = time.time()
         # print("bh loss loop cost: {}s".format(end - start))
         if self.reduction == 'none':
             return result

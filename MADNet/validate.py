@@ -12,8 +12,8 @@ from torch.utils.data import DataLoader
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def compute_rse(img0, img1, L=255.):
-    mse = ((np.abs(img0 - img1) / L) ** 2).mean()
+def compute_rse(img0, img1):
+    mse = (np.abs(img0 - img1) ** 2).mean()
     return np.sqrt(mse)
 
 
@@ -36,7 +36,7 @@ def filter2(x, kernel, mode='same'):
     return convolve2d(x, np.rot90(kernel, 2), mode=mode)
 
 
-def compute_ssim(im1, im2, k1=0.01, k2=0.03, win_size=11, L=255):
+def compute_ssim(im1, im2, k1=0.01, k2=0.03, win_size=11, L=1.):
     if not im1.shape == im2.shape:
         raise ValueError("Input Images must have the same dimensions")
     if len(im1.shape) > 2:
@@ -110,6 +110,8 @@ if __name__ == "__main__":
     err = 0.
     for iteration, batch in enumerate(data_loader, 1):
         dtm, ori = batch
+        dtm = dtm / 255.
+        ori = ori / 255.
         print('dtm max: {}, min: {}'.format(dtm.max(), dtm.min()))
         dtm = torch.unsqueeze(dtm, 1)
         ori = torch.unsqueeze(ori, 1)
