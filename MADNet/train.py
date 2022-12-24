@@ -168,12 +168,8 @@ def train(data_loader, optimizer, model, criterion, epoch):
         fake_predict = dis_model(gen_dtm.detach(), ori)
         real_loss = a_loss(real_predict - fake_predict.mean(0, keepdim=True), valid)
         fake_loss = a_loss(fake_predict - real_predict.mean(0, keepdim=True), fake)
-        # sigmoid = nn.Sigmoid()
-        # real_loss = sigmoid(real_predict - fake_predict.mean(0, keepdim=True))
-        # fake_loss = sigmoid(fake_predict - real_predict.mean(0, keepdim=True))
 
         dis_loss = (real_loss + fake_loss) / 2
-        # dis_loss = a_loss(real_loss, fake_loss)
         
         dis_loss.backward()
         dis_optimizer.step()
@@ -188,11 +184,12 @@ def train(data_loader, optimizer, model, criterion, epoch):
 
         real_predict = dis_model(dtm, ori).detach()
         fake_predict = dis_model(gen_dtm, ori)
-        # real_loss = sigmoid(real_predict - fake_predict.mean(0, keepdim=True))
-        # fake_loss = sigmoid(fake_predict - real_predict.mean(0, keepdim=True))
+        real_loss = a_loss(real_predict - fake_predict.mean(0, keepdim=True), fake)
+        fake_loss = a_loss(fake_predict - real_predict.mean(0, keepdim=True), valid)
         
         gen_loss = 0.5 * g_loss(dtm, gen_dtm) + 5e-2 * bh_loss(dtm, gen_dtm) \
-                   + 5e-3 * a_loss(fake_predict - real_predict.mean(0, keepdim=True), valid)
+                   + 5e-3 * (real_loss + fake_loss) / 2
+        # a_loss(fake_predict - real_predict.mean(0, keepdim=True), valid)
         # gen_loss = 0.5 * g_loss(dtm, gen_dtm) + 5e-2 * bh_loss(dtm, gen_dtm) \
         #            + 5e-3 * a_loss(fake_loss, real_loss)
 
