@@ -6,10 +6,11 @@ from skimage import io
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=64, help='batch size, default to be 64')
-parser.add_argument('--validate_dataset', type=bool, default=False, help='to make a hdf5 validate dataset or not\n'
+parser.add_argument('--validate_dataset', '-v', type=bool, default=False, help='to make a hdf5 validate dataset or not\n'
                                                                          'if yes, input true;\n'
                                                                          'if you are to make a training set, input '
                                                                          'false or let it to be default')
+parser.add_argument('--mini_set', '-m', type=bool, default=True)
 args = parser.parse_args()
 
 # cur_path = os.path.dirname(__file__)
@@ -27,16 +28,21 @@ f = None
 ori_len = None
 dtm_len = None
 
-if not args.validate_dataset:
+if not args.validate_dataset and not args.mini_set:
     # 制作训练集时
     f = h5py.File('/media/mei/Elements/training_dataset.hdf5', 'w')
     ori_len = len(ori_lists)
     dtm_len = len(dtm_lists)
-else:
+elif args.validate_dataset:
     # 制作测试集时
     f = h5py.File('/media/mei/Elements/validating_dataset.hdf5', 'w')
     ori_len = 100
     dtm_len = 100
+elif args.mini_set:
+    # 制作小数据集时
+    f = h5py.File('/media/mei/Elements/mini_dataset.hdf5', 'w')
+    ori_len = 200
+    dtm_len = 200
 
 dtm_grp = f.create_group('dtm_grp')
 ori_grp = f.create_group('ori_grp')
@@ -54,7 +60,7 @@ for file in zip(dtm_lists, ori_lists):
     dtm_file = os.path.join(dtm_path, file[0])
     ori_file = os.path.join(ori_path, file[1])
     dtm = io.imread(dtm_file, plugin='pil')
-    ori = io.imread(ori_file, plugin='pil')
+    ori = io.imread(ori_file, plugin='pil')[:, :, 0]
     dtm_dataset[img_index, ...] = dtm
     ori_dataset[img_index, ...] = ori
     img_index += 1

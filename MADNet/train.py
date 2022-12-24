@@ -2,6 +2,7 @@ import os.path
 import random
 
 import torch
+import torch.nn as nn
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -34,6 +35,9 @@ parser.add_argument("--pretrained", default="", type=str, help="path to pretrain
 
 opt = parser.parse_args()
 device = torch.device("cuda" if opt.cuda and torch.cuda.is_available() else "cpu")
+rse_data = []
+ssim_data = []
+epoch_data = []
 
 
 def main():
@@ -47,7 +51,7 @@ def main():
     if cuda and not torch.cuda.is_available():
         raise Exception("No GPU found, please run without --cuda")
 
-    gpus = [0, 1, 2]
+    gpus = [0, 1, 2, 3]
     opt.seed = random.randint(1, 10000)
     print("Random seed: ", opt.seed)
     torch.manual_seed(opt.seed)
@@ -58,7 +62,7 @@ def main():
 
     print("===> Loading datasets")
     # train_set = DEMDataset("/media/mei/Elements/training_dataset.hdf5")
-    train_set = DEMDataset("../../data/training_dataset.hdf5")
+    train_set = DEMDataset("../../data/mini_dataset_for_madnet2/mini_dataset.hdf5")
     training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize,
                                       shuffle=True)
 
@@ -70,6 +74,7 @@ def main():
     g_loss = GradientLoss().to(device)
     bh_loss = BerhuLoss().to(device)
     a_loss = torch.nn.BCEWithLogitsLoss().to(device)
+    # a_loss = AdversarialLoss().to(device)
 
     if opt.resume:
         if os.path.isfile(opt.resume):
@@ -84,7 +89,7 @@ def main():
     if opt.pretrained:
         if os.path.isfile(opt.pretrained):
             print("=>loading model {}".format(opt.pretrained))
-            checkpoint = torch.load(opt.resume)
+            checkpoint = torch.load(opt.pretrained)
             opt.start_epoch = checkpoint['epoch'] + 1
             gen_model.load_state_dict(checkpoint['gen_model'].state_dict())
             dis_model.load_state_dict(checkpoint['dis_model'].state_dict())
@@ -97,7 +102,7 @@ def main():
     dis_optimizer = torch.optim.Adam(dis_model.parameters(), lr=opt.lr, betas=betas)
 
     print("===> Training")
-    for epoch in range(opt.start_epoch, opt.nEpochs + 1):
+    for epoch in range(opt.start_epoch, opt.start_epoch + opt.nEpochs + 1):
         train(training_data_loader,
               (gen_optimizer, dis_optimizer),
               (gen_model, dis_model),
@@ -111,11 +116,13 @@ def main():
 
 
 def adjust_learning_rate(optimizer, epoch):
-    lr = opt.lr * (0.1 ** (epoch // opt.step))
+    global opt
+    lr = opt.lr * (0.1 ** ((epoch - opt.start_epoch + 1) // opt.step))
     return lr
 
 
 def train(data_loader, optimizer, model, criterion, epoch):
+    global rse_data, ssim_data, epoch_data
     lr = adjust_learning_rate(optimizer, epoch - 1)
     gen_optimizer, dis_optimizer = optimizer
     g_loss, bh_loss, a_loss = criterion
@@ -131,17 +138,14 @@ def train(data_loader, optimizer, model, criterion, epoch):
 
     Tensor = torch.cuda.FloatTensor if opt.cuda and torch.cuda.is_available() else torch.FloatTensor
     # print(Tensor)
-    err = 0
-    rse = 0
-    ssim = 0
-    dis_loss_val = 0
-    gen_loss_val = 0
-    writer = SummaryWriter('./log')
-
+    writer = SummaryWriter('../../log')
+    if not os.path.exists('../img'):
+        os.mkdir('../img')
     torch.autograd.set_detect_anomaly(True)
+    
+    total_rse = 0.
+    total_ssim = 0.
     for iteration, batch in enumerate(data_loader, 1):
-        if iteration > 100:
-            break
         dtm, ori = batch
         dtm = dtm / 255.
         ori = ori / 255.
@@ -151,9 +155,28 @@ def train(data_loader, optimizer, model, criterion, epoch):
         # print("ori shape after unsqueezed: ", ori.shape)
         dtm = dtm.to(device)
         ori = ori.to(device)
-
         valid = Variable(Tensor(dtm.shape[0], 1).fill_(1.0), requires_grad=False)
         fake = Variable(Tensor(dtm.shape[0], 1).fill_(0.0), requires_grad=False)
+        gen_dtm = gen_model(ori)
+        # ---------------------
+        #  Train Discriminator
+        # ---------------------
+
+        dis_optimizer.zero_grad()
+
+        real_predict = dis_model(dtm, ori)
+        fake_predict = dis_model(gen_dtm.detach(), ori)
+        real_loss = a_loss(real_predict - fake_predict.mean(0, keepdim=True), valid)
+        fake_loss = a_loss(fake_predict - real_predict.mean(0, keepdim=True), fake)
+        # sigmoid = nn.Sigmoid()
+        # real_loss = sigmoid(real_predict - fake_predict.mean(0, keepdim=True))
+        # fake_loss = sigmoid(fake_predict - real_predict.mean(0, keepdim=True))
+
+        dis_loss = (real_loss + fake_loss) / 2
+        # dis_loss = a_loss(real_loss, fake_loss)
+        
+        dis_loss.backward()
+        dis_optimizer.step()
 
         # -----------------
         #  Train Generator
@@ -163,58 +186,59 @@ def train(data_loader, optimizer, model, criterion, epoch):
 
         # z = Variable(Tensor(np.random.normal(0, 1, (dtm.shape[0], 1, 512, 512))))
 
-        gen_dtm = gen_model(ori)
-
         real_predict = dis_model(dtm, ori).detach()
         fake_predict = dis_model(gen_dtm, ori)
-
+        # real_loss = sigmoid(real_predict - fake_predict.mean(0, keepdim=True))
+        # fake_loss = sigmoid(fake_predict - real_predict.mean(0, keepdim=True))
+        
         gen_loss = 0.5 * g_loss(dtm, gen_dtm) + 5e-2 * bh_loss(dtm, gen_dtm) \
                    + 5e-3 * a_loss(fake_predict - real_predict.mean(0, keepdim=True), valid)
-        # + bh_loss(dtm, gen_dtm) + a_loss(fake_predict
-        #                                 - real_predict.mean(0, keepdim=True), valid)
+        # gen_loss = 0.5 * g_loss(dtm, gen_dtm) + 5e-2 * bh_loss(dtm, gen_dtm) \
+        #            + 5e-3 * a_loss(fake_loss, real_loss)
 
         gen_loss.backward()
         gen_optimizer.step()
-
-        # ---------------------
-        #  Train Discriminator
-        # ---------------------
-
-        dis_optimizer.zero_grad()
-
-        real_predict = dis_model(dtm, ori)
-        fake_predict = dis_model(gen_dtm.detach(), ori)
-
-        real_loss = a_loss(real_predict - fake_predict.mean(0, keepdim=True), valid)
-        fake_loss = a_loss(fake_predict - real_predict.mean(0, keepdim=True), fake)
-
-        d_loss = (real_loss + fake_loss) / 2
-
-        dis_loss = 0.5 * g_loss(dtm, gen_dtm.detach()) + 5e-2 * bh_loss(dtm, gen_dtm.detach()) + 5e-3 * d_loss
         
-        dis_loss.backward()
-        dis_optimizer.step()
-        
-        if iteration % 5 == 0:
-            writer.add_images('ground_truth', dtm, epoch * iteration + iteration, dataformats='NCHW')
-            writer.add_images('ori', ori, epoch * iteration + iteration, dataformats='NCHW')
-            writer.add_images('predicted', gen_dtm, epoch * iteration + iteration, dataformats='NCHW')
+        np_dtm = dtm.cpu().detach().numpy()
+        np_gen_dtm = gen_dtm.cpu().detach().numpy()
+        val = Validator(np_dtm, np_gen_dtm)
+        rse, ssim = val.validate()
+        total_rse += rse
+        total_ssim += ssim
+        if iteration == len(data_loader):
+            writer.add_images('ground_truth', dtm, epoch, dataformats='NCHW')
+            writer.add_images('ori', ori, epoch, dataformats='NCHW')
+            writer.add_images('predicted', gen_dtm, epoch, dataformats='NCHW')
 
-        # print(
-        #     "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-        #     % (epoch, opt.nEpochs, iteration, len(data_loader), dis_loss.item(), gen_loss.item())
-        # )
         print(
             "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-            % (epoch, opt.nEpochs, iteration, 10, dis_loss.item(), gen_loss.item())
+            % (epoch, opt.nEpochs + opt.start_epoch - 1, iteration,
+               len(data_loader), dis_loss.item(), gen_loss.item())
         )
+        # print(
+        #     "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
+        #     % (epoch, opt.nEpochs + opt.start_epoch, iteration, 100, dis_loss.item(), gen_loss.item())
+        # )
+    total_rse /= len(data_loader)
+    total_ssim /= len(data_loader)
+    rse_data.append(total_rse)
+    ssim_data.append(total_ssim)
+    epoch_data.append(epoch)
+    writer.add_scalar('rse', total_rse, epoch)
+    writer.add_scalar('ssim', total_ssim, epoch)
+    plt.ylim((0, 1))
+    plt.plot(epoch_data, rse_data, c='r', label='rse')
+    plt.plot(epoch_data, ssim_data, c='b', label='ssim')
+    plt.legend()
+    plt.savefig('../img/validate_data.png')
+    plt.close()
 
 
 def save_checkpoint(model, epoch):
     gen_model, dis_model = model
-    model_folder = "../checkpoint/"
-    gen_model_folder = "../checkpoint/gen/"
-    dis_model_folder = "../checkpoint/dis/"
+    model_folder = "../../checkpoint/"
+    gen_model_folder = "../../checkpoint/gen/"
+    dis_model_folder = "../../checkpoint/dis/"
     model_out_path = model_folder + 'model_epoch_{}.pth'.format(epoch)
     gen_model_out_path = gen_model_folder + "gen_model_epoch_{}.pth".format(epoch)
     dis_model_out_path = dis_model_folder + "dis_model_epoch_{}.pth".format(epoch)

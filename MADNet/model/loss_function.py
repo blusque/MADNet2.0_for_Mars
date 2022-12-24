@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 import numpy as np
-import time
+# import time
 
 
 class GradientLoss(nn.Module):
@@ -63,3 +63,13 @@ class BerhuLoss(nn.Module):
             return torch.mean(result)
         elif self.reduction == 'sum':
             return torch.sum(result)
+        
+        
+class AdversarialLoss(nn.Module):
+    """ """
+    
+    def __init__(self):
+        super(AdversarialLoss, self).__init__()
+        
+    def forward(self, v1, v2):
+        return - torch.log(v1).mean() - torch.log(1 - v2).mean()
