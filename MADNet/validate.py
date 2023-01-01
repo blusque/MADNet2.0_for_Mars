@@ -99,7 +99,7 @@ class Validator:
 
 
 if __name__ == "__main__":
-    model_path = '../checkpoint/gen_model_epoch_100.pth'
+    model_path = '../checkpoint/gen_model_epoch_176.pth'
     model = Generator().to(device)
     state_dict = torch.load(model_path)['model'].state_dict()
     model.load_state_dict(state_dict, strict=False)
