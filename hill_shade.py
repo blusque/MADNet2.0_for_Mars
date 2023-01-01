@@ -54,15 +54,19 @@ def hill_shade(input_data, z_factor, altitude=45.0, azimuth=315.0):
 
 
 def main():
-    filename = '/media/mei/Elements/dem_image/dtm/001462_2015-DTM_12.tif'
+    filename = '/media/mei/Elements/dem_image/dtm/001462_2015-DTM_11.tif'
     dtm = io.imread(filename, plugin='pil')
-    io.imshow(dtm)
+    dtm = np.array(dtm, dtype=np.float32)
+    dtm /= 255.
+    plt.imshow(dtm)
     plt.show()
+    # io.imshow(dtm)
+    # plt.show()
     start = time.time()
     relief = hill_shade(dtm, z_factor=1.0)
     end = time.time()
     print("relief cost: ", end - start)
-    io.imshow(relief)
+    io.imshow(relief, plugin='matplotlib', cmap='gray')
     plt.show()
 
 
