@@ -86,9 +86,9 @@ class Validator:
             rse += compute_rse(gt, predicted)
             ssim += compute_ssim(gt, predicted)
         rse /= channels
-        # print(rse)
         ssim /= channels
-        # print(ssim)
+        print('rse: ', rse)
+        print('ssim: ', ssim)
         return rse, ssim
 
 
@@ -117,14 +117,39 @@ def show_result(ori, dtm, gen_dtm):
         plt.show()
 
 
+def show_profile(drawer):
+    if not drawer.line:
+        pass
+    x = drawer.line.get_xdata()
+    y = drawer.line.get_ydata()
+    dx = x[1] - x[0]
+    dy = y[1] - y[0]
+    epsilon = 1e-6
+    theta = 0
+    if dx < epsilon:
+        theta = np.pi / 2.
+    else:
+        theta = np.arctan2(dy, dx)
+    t = np.arange(0, 1, 0.01, dtype=np.float32)
+    x_sample = np.ceil(x[0] + dx * t * np.cos(theta))
+    y_sample = np.ceil(y[0] + dy * t * np.sin(theta))
+    xy_sample = np.concatenate((np.reshape(x_sample, (-1, 1)), 
+                                np.reshape(y_sample, (-1, 1))), 1)
+    img = drawer.ax.get_images()[0].get_array()
+    if len(img.shape) == 3:
+        img = img[:, :, 0]
+    height = img[xy_sample]
+    plt.plot(t, height)
+    plt.show()
+
 if __name__ == "__main__":
     io.use_plugin('matplotlib', 'imshow')
-    model_path = '../checkpoint/gen/gen_model_epoch_176.pth'
+    model_path = '../checkpoint/gen/gen_model_epoch_200.pth'
     model = Generator().to(device)
     state_dict = torch.load(model_path)['model'].state_dict()
     model.load_state_dict(state_dict, strict=False)
 
-    dataset = DEMDataset('/media/mei/Elements/validating_dataset.hdf5')
+    dataset = DEMDataset('/media/mei/Elements/mini_dataset.hdf5')
     batch_size = 8
     data_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)
     err = 0.
@@ -142,8 +167,8 @@ if __name__ == "__main__":
         gen_dtm = model(ori).cpu().detach().numpy()
         # gen_dtm = 100 * np.log10(10 * gen_dtm)
         # gen_dtm /= gen_dtm.max()
-        gen_dtm = np.abs(gen_dtm)
-        gen_dtm = np.where(gen_dtm > 1., 1., gen_dtm)
+        # gen_dtm = np.abs(gen_dtm)
+        # gen_dtm = np.where(gen_dtm > 1., 1., gen_dtm)
         # gen_dtm *= 254.
         for i in range(gen_dtm.shape[0]):
             print('gen_dtm {} max: {}, min: {}'.format(i, gen_dtm[i].max(), gen_dtm[i].min()))
@@ -154,7 +179,7 @@ if __name__ == "__main__":
         print('rse: ', rse)
         print('ssim: ', ssim)
         show_result(show_ori, dtm, gen_dtm)
-        print("total: 100; now: {}".format(iteration * batch_size))
+        print("total: {}; now: {}".format(len(data_loader), iteration * batch_size))
         break
     # err /= batch_size
     # print(err.shape)

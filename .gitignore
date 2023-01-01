@@ -4,5 +4,9 @@ MADNet/__pycache__/
 MADNet/.idea_/
 MADNet/model/__pycache__/
 MADNet/model/.ipynb_checkpoints/
+MADNet/img/
+MADNet/log/
+img/
+log/
 MADNet.zip
 checkpoint/

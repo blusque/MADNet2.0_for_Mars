@@ -5,12 +5,12 @@ import numpy as np
 from skimage import io
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, default=64, help='batch size, default to be 64')
+parser.add_argument('--batch-size', type=int, default=64, help='batch size, default to be 64')
 parser.add_argument('--validate_dataset', '-v', type=bool, default=False, help='to make a hdf5 validate dataset or not\n'
                                                                          'if yes, input true;\n'
                                                                          'if you are to make a training set, input '
                                                                          'false or let it to be default')
-parser.add_argument('--mini_set', '-m', type=bool, default=True)
+parser.add_argument('--mini-set', '-m', type=bool, default=True)
 args = parser.parse_args()
 
 # cur_path = os.path.dirname(__file__)
@@ -41,8 +41,8 @@ elif args.validate_dataset:
 elif args.mini_set:
     # 制作小数据集时
     f = h5py.File('/media/mei/Elements/mini_dataset.hdf5', 'w')
-    ori_len = 200
-    dtm_len = 200
+    ori_len = 8
+    dtm_len = 8
 
 dtm_grp = f.create_group('dtm_grp')
 ori_grp = f.create_group('ori_grp')

@@ -9,6 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.nn import DataParallel
 import torch.backends.cudnn as cudnn
 import matplotlib.pyplot as plt
+import time
 
 from dataset import DEMDataset
 from model.generator import Generator
@@ -21,8 +22,10 @@ import argparse
 parser = argparse.ArgumentParser(description="Pytorch MadNet 2.0 for mars")
 parser.add_argument("--batchSize", type=int, default=64, help="training batch size")
 parser.add_argument("--nEpochs", type=int, default=100, help="number of epochs to train for")
-parser.add_argument("--lr", type=float, default=1e-4, help="Learning Rate. Default=1e-4")
-parser.add_argument("--step", type=int, default=100,
+parser.add_argument("--gen-lr", type=float, default=1e-3, help="Generator Learning Rate. Default=1e-3")
+parser.add_argument("--dis-lr", type=float, default=1e-5, help="Discriminator Learning Rate. Default=1e-5")
+parser.add_argument("--gen-step", type=int, default=100)
+parser.add_argument("--dis-step", type=int, default=100,
                     help="Sets the learning rate to the initial LR decayed by momentum every n epochs, Default: n=10")
 parser.add_argument("--cuda", action="store_true", help="Use cuda?")
 parser.add_argument("--resume", default="", type=str, help="Path to checkpoint (default: none)")
@@ -51,7 +54,7 @@ def main():
     if cuda and not torch.cuda.is_available():
         raise Exception("No GPU found, please run without --cuda")
 
-    gpus = [0, 1, 2, 3]
+    gpus = [0]
     opt.seed = random.randint(1, 10000)
     print("Random seed: ", opt.seed)
     torch.manual_seed(opt.seed)
@@ -61,8 +64,8 @@ def main():
     cudnn.benchmark = True
 
     print("===> Loading datasets")
-    # train_set = DEMDataset("/media/mei/Elements/training_dataset.hdf5")
-    train_set = DEMDataset("../../data/mini_dataset_for_madnet2/mini_dataset.hdf5")
+    train_set = DEMDataset("/media/mei/Elements/mini_dataset.hdf5")
+    # train_set = DEMDataset("../../data/mini_dataset_for_madnet2/mini_dataset.hdf5")
     training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize,
                                       shuffle=True)
 
@@ -98,8 +101,8 @@ def main():
 
     print("===> Setting Optimizer")
     betas = (opt.beta1, opt.beta2)
-    gen_optimizer = torch.optim.Adam(gen_model.parameters(), lr=opt.lr, betas=betas)
-    dis_optimizer = torch.optim.Adam(dis_model.parameters(), lr=opt.lr, betas=betas)
+    gen_optimizer = torch.optim.Adam(gen_model.parameters(), lr=opt.gen_lr, betas=betas)
+    dis_optimizer = torch.optim.Adam(dis_model.parameters(), lr=opt.dis_lr, betas=betas)
 
     print("===> Training")
     for epoch in range(opt.start_epoch, opt.start_epoch + opt.nEpochs + 1):
@@ -107,38 +110,39 @@ def main():
               (gen_optimizer, dis_optimizer),
               (gen_model, dis_model),
               (g_loss, bh_loss, a_loss),
-              epoch
-              )
-        save_checkpoint(
-            (gen_model, dis_model),
-            epoch
-        )
+              epoch)
+        if epoch % 10 == 0:
+            save_checkpoint((gen_model, dis_model),epoch)
 
 
-def adjust_learning_rate(optimizer, epoch):
+def adjust_learning_rate(epoch, type: str):
     global opt
-    lr = opt.lr * (0.1 ** ((epoch - opt.start_epoch + 1) // opt.step))
+    if type == 'gen':
+        lr = opt.gen_lr * (0.1 ** ((epoch - opt.start_epoch + 1) // opt.gen_step))
+    elif type == 'dis':
+        lr = opt.dis_lr * (0.1 ** ((epoch - opt.start_epoch + 1) // opt.dis_step))
     return lr
 
 
 def train(data_loader, optimizer, model, criterion, epoch):
     global rse_data, ssim_data, epoch_data
-    lr = adjust_learning_rate(optimizer, epoch - 1)
+    gen_lr = adjust_learning_rate(epoch - 1, 'gen')
+    dis_lr = adjust_learning_rate(epoch - 1, 'dis')
     gen_optimizer, dis_optimizer = optimizer
     g_loss, bh_loss, a_loss = criterion
 
     for param_group in gen_optimizer.param_groups:
-        param_group['lr'] = lr
+        param_group['lr'] = gen_lr
     for param_group in dis_optimizer.param_groups:
-        param_group['lr'] = lr
+        param_group['lr'] = dis_lr
 
-    print("Epoch={}, lr={}".format(epoch, lr))
+    print("Epoch={}, gen_lr={}, dis_lr={}".format(epoch, gen_lr, dis_lr))
 
     gen_model, dis_model = model
 
     Tensor = torch.cuda.FloatTensor if opt.cuda and torch.cuda.is_available() else torch.FloatTensor
     # print(Tensor)
-    writer = SummaryWriter('../../log')
+    writer = SummaryWriter('../log')
     if not os.path.exists('../img'):
         os.mkdir('../img')
     torch.autograd.set_detect_anomaly(True)
@@ -146,6 +150,7 @@ def train(data_loader, optimizer, model, criterion, epoch):
     total_rse = 0.
     total_ssim = 0.
     for iteration, batch in enumerate(data_loader, 1):
+        start0 = time.time()
         dtm, ori = batch
         dtm = dtm / 255.
         ori = ori / 255.
@@ -157,15 +162,21 @@ def train(data_loader, optimizer, model, criterion, epoch):
         ori = ori.to(device)
         valid = Variable(Tensor(dtm.shape[0], 1).fill_(1.0), requires_grad=False)
         fake = Variable(Tensor(dtm.shape[0], 1).fill_(0.0), requires_grad=False)
+        end0 = time.time()
+        # print('initialize time cost: {}'.format(end0 - start0))
         gen_dtm = gen_model(ori)
+        end1 = time.time()
+        # print('generate time cost: {}'.format(end1 - end0))
         # ---------------------
         #  Train Discriminator
         # ---------------------
 
         dis_optimizer.zero_grad()
-
+        
         real_predict = dis_model(dtm, ori)
         fake_predict = dis_model(gen_dtm.detach(), ori)
+        end2 = time.time()
+        # print('discrime time cost: {}'.format(end2 - end1))
         real_loss = a_loss(real_predict - fake_predict.mean(0, keepdim=True), valid)
         fake_loss = a_loss(fake_predict - real_predict.mean(0, keepdim=True), fake)
 
@@ -173,6 +184,8 @@ def train(data_loader, optimizer, model, criterion, epoch):
         
         dis_loss.backward()
         dis_optimizer.step()
+        end3 = time.time()
+        # print('dis loss compute time cost: {}'.format(end3 - end2))
 
         # -----------------
         #  Train Generator
@@ -195,6 +208,8 @@ def train(data_loader, optimizer, model, criterion, epoch):
 
         gen_loss.backward()
         gen_optimizer.step()
+        end4 = time.time()
+        # print('gen loss compute time cost: {}'.format(end4 - end3))
         
         np_dtm = dtm.cpu().detach().numpy()
         np_gen_dtm = gen_dtm.cpu().detach().numpy()
@@ -227,15 +242,18 @@ def train(data_loader, optimizer, model, criterion, epoch):
     plt.plot(epoch_data, rse_data, c='r', label='rse')
     plt.plot(epoch_data, ssim_data, c='b', label='ssim')
     plt.legend()
-    plt.savefig('../img/validate_data.png')
+    plt.savefig('../img/validate_data_2.png')
     plt.close()
 
 
 def save_checkpoint(model, epoch):
     gen_model, dis_model = model
-    model_folder = "../../checkpoint/"
-    gen_model_folder = "../../checkpoint/gen/"
-    dis_model_folder = "../../checkpoint/dis/"
+    # model_folder = "../../checkpoint/"
+    # gen_model_folder = "../../checkpoint/gen/"
+    # dis_model_folder = "../../checkpoint/dis/"
+    model_folder = "../checkpoint/"
+    gen_model_folder = "../checkpoint/gen/"
+    dis_model_folder = "../checkpoint/dis/"
     model_out_path = model_folder + 'model_epoch_{}.pth'.format(epoch)
     gen_model_out_path = gen_model_folder + "gen_model_epoch_{}.pth".format(epoch)
     dis_model_out_path = dis_model_folder + "dis_model_epoch_{}.pth".format(epoch)

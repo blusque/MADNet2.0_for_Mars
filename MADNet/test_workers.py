@@ -13,7 +13,7 @@ from dataset import DEMDataset
 #     torchvision.transforms.Normalize((0.1307,), (0.3081,))
 # ])
  
-train_set = DEMDataset("../../data/mini_dataset_for_madnet2/mini_dataset.hdf5")
+train_set = DEMDataset("/media/mei/Elements/mini_dataset.hdf5")
 
 # trainset = torchvision.datasets.MNIST(
 #     root='dataset/',
