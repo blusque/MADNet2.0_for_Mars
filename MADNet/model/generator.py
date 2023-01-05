@@ -54,7 +54,7 @@ class Down(nn.Module):
         super(Down, self).__init__()
         self.down = nn.Sequential(
             DenseBlock(in_channels, in_channels, k),
-            nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
+            ConvBlock_(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
         )
 
     def forward(self, x):
@@ -90,7 +90,7 @@ class Up(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(Up, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1),
+            ConvBlock_(in_channels, out_channels, kernel_size=3, stride=1, padding=1),
             nn.LeakyReLU(1e-2, inplace=True)
         )
         self.up = UPB(out_channels, out_channels)
@@ -111,10 +111,8 @@ def get_indices(batch_size, input_channels, input_size, cuda):
         for s in range(input_channels)
     ]
         for t in range(batch_size)], dtype=torch.int64)
-    # print(cuda)
     if cuda:
         indices = indices.cuda()
-        # print(indices.device)
     return indices
 
 
@@ -125,11 +123,12 @@ class Generator(nn.Module):
         super(Generator, self).__init__()
         # down arm(encoder)
         self.extract = nn.Sequential(
-            nn.Conv2d(1, 64, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(32),
             nn.LeakyReLU(1e-2, inplace=True)
         )
         self.first_pooling = nn.MaxPool2d(3, stride=2, padding=1)
-        self.down1 = Down(64, 64, 12)
+        self.down1 = Down(32, 64, 12)
         self.pooling1 = nn.MaxPool2d(2, stride=2)
         self.down2 = Down(64, 128, 12)
         self.pooling2 = nn.MaxPool2d(2, stride=2)
@@ -143,10 +142,10 @@ class Generator(nn.Module):
         self.up2 = Up(1024, 256)
         self.up3 = Up(512, 128)
         self.up4 = Up(256, 64)
-        self.up5 = Up(128, 64)
+        self.up5 = Up(128, 32)
         self.reconstruct = nn.Sequential(
-            nn.BatchNorm2d(128),
-            nn.Conv2d(128, 1, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64),
+            nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1),
             nn.LeakyReLU(1e-2, inplace=True)
         )
         self.on_cuda = False
@@ -161,7 +160,7 @@ class Generator(nn.Module):
         pooled2 = self.pooling2(output2)
         output3 = self.down3(pooled2)
         pooled3 = self.pooling3(output3)
-        output4 = self.down4(pooled3)  # 16x512x16x16
+        output4 = self.down4(pooled3)  # Nx512x16x16
         encoder_result = self.pooling4(output4)
 
         # decoder arm
@@ -184,7 +183,7 @@ class Generator(nn.Module):
         up_result4 = self.up4(up_result3, output1, indices4)
         # print(up_result4.shape)
         indices5 = get_indices(up_result4.shape[0]
-                               , up_result4.shape[1] // 2, 256, self.on_cuda)
+                               , up_result4.shape[1] // 4, 256, self.on_cuda)
         up_result5 = self.up5(up_result4, feature, indices5)
         # print(up_result5.shape)
         result = self.reconstruct(up_result5)

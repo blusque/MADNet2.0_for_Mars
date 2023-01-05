@@ -20,10 +20,10 @@ from validate import Validator
 import argparse
 
 parser = argparse.ArgumentParser(description="Pytorch MadNet 2.0 for mars")
-parser.add_argument("--batchSize", type=int, default=64, help="training batch size")
+parser.add_argument("--batchSize", type=int, default=8, help="training batch size")
 parser.add_argument("--nEpochs", type=int, default=100, help="number of epochs to train for")
-parser.add_argument("--gen-lr", type=float, default=1e-3, help="Generator Learning Rate. Default=1e-3")
-parser.add_argument("--dis-lr", type=float, default=1e-5, help="Discriminator Learning Rate. Default=1e-5")
+parser.add_argument("--gen-lr", type=float, default=1e-4, help="Generator Learning Rate. Default=1e-3")
+parser.add_argument("--dis-lr", type=float, default=1e-6, help="Discriminator Learning Rate. Default=1e-5")
 parser.add_argument("--gen-step", type=int, default=100)
 parser.add_argument("--dis-step", type=int, default=100,
                     help="Sets the learning rate to the initial LR decayed by momentum every n epochs, Default: n=10")
@@ -49,6 +49,8 @@ def main():
     print(device)
 
     cuda = opt.cuda
+    if os.name == "nt":
+        opt.threads = 0
     if torch.cuda.is_available():
         print("Let's use", torch.cuda.device_count(), "GPUs!")
     if cuda and not torch.cuda.is_available():
@@ -64,8 +66,12 @@ def main():
     cudnn.benchmark = True
 
     print("===> Loading datasets")
-    train_set = DEMDataset("/media/mei/Elements/mini_dataset.hdf5")
-    # train_set = DEMDataset("../../data/mini_dataset_for_madnet2/mini_dataset.hdf5")
+    train_set = None
+    if os.name == "nt":
+        train_set = DEMDataset("G:\\mini_dataset.hdf5")
+    elif os.name == "posix":
+        train_set = DEMDataset("/media/mei/Elements/mini_dataset.hdf5")
+        # train_set = DEMDataset("../../data/mini_dataset_for_madnet2/mini_dataset.hdf5")
     training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize,
                                       shuffle=True)
 
@@ -200,7 +206,11 @@ def train(data_loader, optimizer, model, criterion, epoch):
         real_loss = a_loss(real_predict - fake_predict.mean(0, keepdim=True), fake)
         fake_loss = a_loss(fake_predict - real_predict.mean(0, keepdim=True), valid)
         
-        gen_loss = 0.5 * g_loss(dtm, gen_dtm) + 5e-2 * bh_loss(dtm, gen_dtm) \
+        g_loss_value = g_loss(dtm, gen_dtm)
+        bh_loss_value = bh_loss(dtm, gen_dtm)
+        print('g_loss: {}, bh_loss: {}, a_loss: {}'.format(g_loss_value, bh_loss_value
+                                                           , (real_loss + fake_loss) / 2))
+        gen_loss = 500 * g_loss_value + 5 * bh_loss_value \
                    + 5e-3 * (real_loss + fake_loss) / 2
         # a_loss(fake_predict - real_predict.mean(0, keepdim=True), valid)
         # gen_loss = 0.5 * g_loss(dtm, gen_dtm) + 5e-2 * bh_loss(dtm, gen_dtm) \
@@ -253,26 +263,26 @@ def save_checkpoint(model, epoch):
     # dis_model_folder = "../../checkpoint/dis/"
     model_folder = "../checkpoint/"
     gen_model_folder = "../checkpoint/gen/"
-    dis_model_folder = "../checkpoint/dis/"
+    # dis_model_folder = "../checkpoint/dis/"
     model_out_path = model_folder + 'model_epoch_{}.pth'.format(epoch)
     gen_model_out_path = gen_model_folder + "gen_model_epoch_{}.pth".format(epoch)
-    dis_model_out_path = dis_model_folder + "dis_model_epoch_{}.pth".format(epoch)
+    # dis_model_out_path = dis_model_folder + "dis_model_epoch_{}.pth".format(epoch)
     model_state = {'epoch': epoch, 'gen_model': gen_model, 'dis_model': dis_model}
     gen_state = {"epoch": epoch, "model": gen_model}
-    dis_state = {"epoch": epoch, "model": dis_model}
+    # dis_state = {"epoch": epoch, "model": dis_model}
 
     if not os.path.exists(model_folder):
         os.makedirs(model_folder)
     if not os.path.exists(gen_model_folder):
         os.makedirs(gen_model_folder)
-    if not os.path.exists(dis_model_folder):
-        os.makedirs(dis_model_folder)
+    # if not os.path.exists(dis_model_folder):
+        # os.makedirs(dis_model_folder)
 
     torch.save(model_state, model_out_path)
     torch.save(gen_state, gen_model_out_path)
-    torch.save(dis_state, dis_model_out_path)
+    # torch.save(dis_state, dis_model_out_path)
 
-    print("Checkpoint saved to {} & {}".format(gen_model_out_path, dis_model_out_path))
+    print("Checkpoint saved to {} & {}".format(gen_model_out_path, model_out_path))
 
 
 if __name__ == '__main__':

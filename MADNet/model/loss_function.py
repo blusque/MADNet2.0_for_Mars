@@ -11,21 +11,17 @@ class GradientLoss(nn.Module):
 
     def __init__(self, reduction='mean'):
         super(GradientLoss, self).__init__()
-        sobel_x_numpy = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=np.float32)
-        sobel_y_numpy = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=np.float32)
-        sobel_x = torch.from_numpy(sobel_x_numpy.copy())
-        sobel_y = torch.from_numpy(sobel_y_numpy.copy())
-        sobel_x.unsqueeze_(0).unsqueeze_(0)
-        sobel_y.unsqueeze_(0).unsqueeze_(0)
+        sobel_x = torch.tensor([[[[0, 0, 0], [-0.5, 0, 0.5], [0, 0, 0]]]], dtype=torch.float32)
+        sobel_y = torch.tensor([[[[0, -0.5, 0], [0, 0, 0], [0, 0.5, 0]]]], dtype=torch.float32)
         self.sobel_x = nn.Parameter(data=sobel_x, requires_grad=False)
         self.sobel_y = nn.Parameter(data=sobel_y, requires_grad=False)
         self.reduction = reduction
 
     def forward(self, gt: torch.tensor, est: torch.tensor):
-        grad_gt_x = F.conv2d(gt, self.sobel_x, stride=1, padding=1)
-        grad_gt_y = F.conv2d(gt, self.sobel_y, stride=1, padding=1)
-        grad_est_x = F.conv2d(est, self.sobel_x, stride=1, padding=1)
-        grad_est_y = F.conv2d(est, self.sobel_y, stride=1, padding=1)
+        grad_gt_x = torch.abs(F.conv2d(gt, self.sobel_x, stride=1, padding=1))
+        grad_gt_y = torch.abs(F.conv2d(gt, self.sobel_y, stride=1, padding=1))
+        grad_est_x = torch.abs(F.conv2d(est, self.sobel_x, stride=1, padding=1))
+        grad_est_y = torch.abs(F.conv2d(est, self.sobel_y, stride=1, padding=1))
         delta_x = (grad_gt_x - grad_est_x) ** 2
         delta_y = (grad_gt_y - grad_est_y) ** 2
         if self.reduction == 'none':
@@ -37,7 +33,7 @@ class GradientLoss(nn.Module):
 
 
 class BerhuLoss(nn.Module):
-    """ L1 when abs(h_gt - h_est) < \tao, L2 when abs(h_gt - h_est) > \tao """
+    """ L1 when abs(h_gt - h_est) < tao, L2 when abs(h_gt - h_est) > tao """
 
     def __init__(self, reduction='mean'):
         super(BerhuLoss, self).__init__()

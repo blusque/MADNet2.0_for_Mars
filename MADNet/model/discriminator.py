@@ -46,9 +46,9 @@ class Discriminator(nn.Module):
 
     def __init__(self):
         super(Discriminator, self).__init__()
-        self.merge = MergeLayer(1, 64)
+        self.merge = MergeLayer(1, 32)
         self.convs = nn.Sequential(
-            ConvBlock_(128, 64),
+            ConvBlock_(64, 64),
             ConvBlock_(64, 64, 2),
             ConvBlock_(64, 128),
             ConvBlock_(128, 128, 2),
@@ -57,9 +57,9 @@ class Discriminator(nn.Module):
             ConvBlock_(256, 512),
             ConvBlock_(512, 512, 2)
         )
-        self.fc1 = nn.Linear(512 * 32 * 32, 200)
+        self.fc1 = nn.Linear(512 * 32 * 32, 10)
         self.lrelu = nn.LeakyReLU(1e-2, inplace=True)
-        self.fc2 = nn.Linear(200, 1)
+        self.fc2 = nn.Linear(10, 1)
 
     def forward(self, x_h, x_i):
         # print("x_h size: ", x_h.shape)

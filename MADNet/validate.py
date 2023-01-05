@@ -1,4 +1,5 @@
 import torch.nn
+from torch.nn import DataParallel
 import numpy as np
 from skimage import io
 import matplotlib.pyplot as plt
@@ -8,9 +9,10 @@ from dataset import DEMDataset
 from torch.utils.data import DataLoader
 
 import sys
+import os
 sys.path.append('..')
 from hill_shade import hill_shade
-from line_drawer import LineDrawer
+from line_drawer import *
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -105,9 +107,26 @@ def show_result(ori, dtm, gen_dtm):
         ax12.imshow(predicted, cmap='gray')
         ax13.set_title('ori')
         ax13.imshow(ori, cmap='gray')
+        line_drawer_1 = LineDrawer(fig1, ax11)
+        line_drawer_2 = LineDrawer(fig1, ax12)
+        fig, ax = plt.subplots()
+        def on_scroll(event):
+            ax = event.inaxes
+            y_min, y_max = ax.get_ylim()
+            range_y = (y_max - y_min) / 10.
+            if event.button == 'up':
+                ax.set(ylim=(y_min + range_y, y_max - range_y))
+            elif event.button == 'down':
+                ax.set(ylim=(y_min - range_y, y_max + range_y))
+            fig.canvas.draw_idle()  # 绘图动作实时反映在图像上
+        fig.canvas.mpl_connect('scroll_event', on_scroll)
+        line_drawer_1.draw((reshow_images, (gt, )), (show_profile, (fig, ax, 'ground_truth')))
+        line_drawer_2.draw((reshow_images, (predicted, )), (show_profile, (fig, ax, 'prediected')))
         plt.show()
-        gt_relief = hill_shade(gt, z_factor=1.0)
-        predicted_relief = hill_shade(predicted, z_factor=1.0)
+        gt_relief = hill_shade(gt, z_factor=10.0)
+        predicted_relief = hill_shade(predicted, z_factor=10.0)
+        predicted_relief = np.where(predicted_relief < 0.5, 0.5, predicted_relief)
+        predicted_relief = np.where(predicted_relief > 0.9, 0.9, predicted_relief)
         fig2, (ax21, ax22) = plt.subplots(1, 2)
         fig2.suptitle('hill_shade_relief')
         ax21.set_title('gt_relief')
@@ -117,40 +136,58 @@ def show_result(ori, dtm, gen_dtm):
         plt.show()
 
 
-def show_profile(drawer):
+def reshow_images(drawer, *images):
+    for i in range(len(images)):
+        im = images[i]
+        drawer.ax.imshow(im, cmap='gray')
+
+
+def show_profile(drawer, *args):
     if not drawer.line:
-        pass
-    x = drawer.line.get_xdata()
-    y = drawer.line.get_ydata()
+        return
+    x = drawer.line[0].get_xdata()
+    y = drawer.line[0].get_ydata()
+    if drawer.mode == 'x':
+        x = [0., 512.]
+    elif drawer.mode == 'y':
+        y = [0., 512.]
     dx = x[1] - x[0]
     dy = y[1] - y[0]
-    epsilon = 1e-6
-    theta = 0
-    if dx < epsilon:
-        theta = np.pi / 2.
-    else:
-        theta = np.arctan2(dy, dx)
     t = np.arange(0, 1, 0.01, dtype=np.float32)
-    x_sample = np.ceil(x[0] + dx * t * np.cos(theta))
-    y_sample = np.ceil(y[0] + dy * t * np.sin(theta))
-    xy_sample = np.concatenate((np.reshape(x_sample, (-1, 1)), 
-                                np.reshape(y_sample, (-1, 1))), 1)
+    x_sample = np.floor(x[0] + dx * t)
+    y_sample = np.floor(y[0] + dy * t)
+    x_sample = np.array(x_sample, dtype=np.int32)
+    y_sample = np.array(y_sample, dtype=np.int32)
     img = drawer.ax.get_images()[0].get_array()
     if len(img.shape) == 3:
         img = img[:, :, 0]
-    height = img[xy_sample]
-    plt.plot(t, height)
-    plt.show()
+    height = img[y_sample, x_sample]
+    fig, ax, label = args
+    ax.set_ylim((0., 1.))
+    lines = ax.get_lines()
+    if len(lines) == 2:
+        ax.cla()
+    lines = ax.plot(t, height, label=label)
+    # fig.savefig('./validate_{}.png'.format(times))
+    fig.legend()
+    fig.show()
+    # plt.close()
 
 if __name__ == "__main__":
     io.use_plugin('matplotlib', 'imshow')
-    model_path = '../checkpoint/gen/gen_model_epoch_200.pth'
+    model_path = '../checkpoint/model_epoch_1000.pth'
+    gpus = [0]
     model = Generator().to(device)
-    state_dict = torch.load(model_path)['model'].state_dict()
-    model.load_state_dict(state_dict, strict=False)
-
-    dataset = DEMDataset('/media/mei/Elements/mini_dataset.hdf5')
-    batch_size = 8
+    model = DataParallel(model, device_ids=gpus)
+    state_dict = torch.load(model_path)['gen_model'].state_dict()
+    model.load_state_dict(state_dict)
+    dataset = None
+    if os.name == "nt":
+        dataset = DEMDataset("G:\\mini_dataset.hdf5")
+    elif os.name == "posix":
+        dataset = DEMDataset("/media/mei/Elements/mini_dataset.hdf5")
+        # train_set = DEMDataset("../../data/mini_dataset_for_madnet2/mini_dataset.hdf5")
+    batch_size = 1
     data_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)
     err = 0.
     for iteration, batch in enumerate(data_loader, 1):
@@ -158,6 +195,7 @@ if __name__ == "__main__":
         dtm = dtm / 255.
         ori = ori / 255.
         print('dtm max: {}, min: {}'.format(dtm.max(), dtm.min()))
+        print('dtm mean: {}, var: {}'.format(dtm.mean(), dtm.var()))
         dtm = torch.unsqueeze(dtm, 1)
         ori = torch.unsqueeze(ori, 1)
         dtm = dtm.numpy()
@@ -167,8 +205,9 @@ if __name__ == "__main__":
         gen_dtm = model(ori).cpu().detach().numpy()
         # gen_dtm = 100 * np.log10(10 * gen_dtm)
         # gen_dtm /= gen_dtm.max()
-        # gen_dtm = np.abs(gen_dtm)
-        # gen_dtm = np.where(gen_dtm > 1., 1., gen_dtm)
+        gen_dtm = np.abs(gen_dtm)
+        gen_dtm = np.where(gen_dtm > 1., 1., gen_dtm)
+        gen_dtm = np.where(gen_dtm < 0., 0., gen_dtm)
         # gen_dtm *= 254.
         for i in range(gen_dtm.shape[0]):
             print('gen_dtm {} max: {}, min: {}'.format(i, gen_dtm[i].max(), gen_dtm[i].min()))
@@ -176,11 +215,6 @@ if __name__ == "__main__":
 
         val = Validator(dtm, gen_dtm)
         rse, ssim = val.validate()
-        print('rse: ', rse)
-        print('ssim: ', ssim)
         show_result(show_ori, dtm, gen_dtm)
         print("total: {}; now: {}".format(len(data_loader), iteration * batch_size))
         break
-    # err /= batch_size
-    # print(err.shape)
-    print("mean err: ", err)
