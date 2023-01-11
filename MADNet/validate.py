@@ -89,8 +89,6 @@ class Validator:
             ssim += compute_ssim(gt, predicted)
         rse /= channels
         ssim /= channels
-        print('rse: ', rse)
-        print('ssim: ', ssim)
         return rse, ssim
 
 
