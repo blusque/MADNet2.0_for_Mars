@@ -133,7 +133,8 @@ def train(data_loader, optimizer, model, criterion, epoch):
     for param_group in dis_optimizer.param_groups:
         param_group['lr'] = dis_lr
 
-    print("Epoch={}, gen_lr={}, dis_lr={}".format(epoch, gen_lr, dis_lr))
+    print("[Epoch %d/%d] " % (epoch, opt.nEpochs + opt.start_epoch - 1),
+          "gen_lr={}, dis_lr={}".format(gen_lr, dis_lr))
 
     gen_model, dis_model = model
 
@@ -146,7 +147,7 @@ def train(data_loader, optimizer, model, criterion, epoch):
     
     total_rse = 0.
     total_ssim = 0.
-    bar = tqdm(enumerate(data_loader, 1), leave=True, total=len(data_loader))
+    bar = tqdm(enumerate(data_loader, 1), leave=False, total=len(data_loader))
     bar.set_description('Iteration ' + str(0))
     bar.set_postfix(
         D_loss=None, 
