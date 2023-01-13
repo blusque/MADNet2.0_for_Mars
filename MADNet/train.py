@@ -35,8 +35,8 @@ parser.add_argument("--threads", type=int, default=1, help="Number of threads fo
 parser.add_argument("--beta1", default=0.9, type=float, help="Adam beta 1, Default: 0.9")
 parser.add_argument("--beta2", default=0.999, type=float, help="Adam beta 2, Default: 0.999")
 parser.add_argument("--weight-decay", "--wd", default=1e-4, type=float, help="weight decay, Default: 1e-4")
-parser.add_argument("--pretrained", default="", type=str, help="path to pretrained model (default: none)")
 parser.add_argument("--save-per-epochs", "-p", default=10, type=int, help="How many epochs the checkpoint is saved once.")
+parser.add_argument("--dataset", "-d", default="", type=str, help="Path to Dataset")
 
 opt = parser.parse_args()
 device = torch.device("cuda" if opt.cuda and torch.cuda.is_available() else "cpu")
@@ -70,11 +70,9 @@ def main():
     print("===> Loading datasets")
     train_set = None
     if os.name == "nt":
-        train_set = DEMDataset("G:\\training_dataset.hdf5")
+        train_set = DEMDataset(opt.dataset)
     elif os.name == "posix":
-        # train_set = DEMDataset("/media/mei/Elements/mini_dataset.hdf5")
-        train_set = DEMDataset("/mnt/g/mini_dataset.hdf5")
-        # train_set = DEMDataset("../../../data/training_dataset.hdf5")
+        train_set = DEMDataset(opt.dataset)
     training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize,
                                       shuffle=True, drop_last=True)
 
@@ -97,16 +95,6 @@ def main():
             dis_model.load_state_dict(checkpoint['dis_model'].state_dict())
         else:
             print("=> no checkpoint fount at {}".format(opt.resume))
-
-    if opt.pretrained:
-        if os.path.isfile(opt.pretrained):
-            print("=>loading model {}".format(opt.pretrained))
-            checkpoint = torch.load(opt.pretrained)
-            opt.start_epoch = checkpoint['epoch'] + 1
-            gen_model.load_state_dict(checkpoint['gen_model'].state_dict())
-            dis_model.load_state_dict(checkpoint['dis_model'].state_dict())
-        else:
-            print("=> no model fount at {}".format(opt.pretrained))
 
     print("===> Setting Optimizer")
     betas = (opt.beta1, opt.beta2)
