@@ -24,9 +24,9 @@ parser = argparse.ArgumentParser(description="Pytorch MadNet 2.0 for mars")
 parser.add_argument("--batchSize", type=int, default=8, help="training batch size")
 parser.add_argument("--nEpochs", type=int, default=100, help="number of epochs to train for")
 parser.add_argument("--gen-lr", type=float, default=1e-4, help="Generator Learning Rate. Default=1e-3")
-parser.add_argument("--dis-lr", type=float, default=1e-6, help="Discriminator Learning Rate. Default=1e-5")
-parser.add_argument("--gen-step", type=int, default=1000)
-parser.add_argument("--dis-step", type=int, default=1000,
+parser.add_argument("--dis-lr", type=float, default=5e-7, help="Discriminator Learning Rate. Default=1e-5")
+parser.add_argument("--gen-step", type=int, default=200)
+parser.add_argument("--dis-step", type=int, default=200,
                     help="Sets the learning rate to the initial LR decayed by momentum every n epochs, Default: n=10")
 parser.add_argument("--cuda", action="store_true", help="Use cuda?")
 parser.add_argument("--resume", default="", type=str, help="Path to checkpoint (default: none)")
@@ -36,6 +36,7 @@ parser.add_argument("--beta1", default=0.9, type=float, help="Adam beta 1, Defau
 parser.add_argument("--beta2", default=0.999, type=float, help="Adam beta 2, Default: 0.999")
 parser.add_argument("--weight-decay", "--wd", default=1e-4, type=float, help="weight decay, Default: 1e-4")
 parser.add_argument("--pretrained", default="", type=str, help="path to pretrained model (default: none)")
+parser.add_argument("--save-per-epochs, -p", default=10, type=int, help="How many epochs the checkpoint is saved once.")
 
 opt = parser.parse_args()
 device = torch.device("cuda" if opt.cuda and torch.cuda.is_available() else "cpu")
@@ -71,8 +72,8 @@ def main():
     if os.name == "nt":
         train_set = DEMDataset("G:\\training_dataset.hdf5")
     elif os.name == "posix":
-        train_set = DEMDataset("/media/mei/Elements/mini_dataset.hdf5")
-        # train_set = DEMDataset("../../data/mini_dataset_for_madnet2/mini_dataset.hdf5")
+        # train_set = DEMDataset("/media/mei/Elements/mini_dataset.hdf5")
+        train_set = DEMDataset("../../../data/training_dataset.hdf5")
     training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize,
                                       shuffle=True, drop_last=True)
 
@@ -118,7 +119,7 @@ def main():
               (gen_model, dis_model),
               (g_loss, bh_loss, a_loss),
               epoch)
-        if epoch % 10 == 0:
+        if epoch % opt.save_per_epochs == 0:
             save_checkpoint((gen_model, dis_model),epoch)
 
 
@@ -211,19 +212,21 @@ def train(data_loader, optimizer, model, criterion, epoch):
         # print('g_loss: {}, bh_loss: {}, a_loss: {}'.format(g_loss_value, bh_loss_value
         #                                                    , (real_loss + fake_loss) / 2))
         gen_loss = 500 * g_loss_value + 5 * bh_loss_value \
-                   + 5e-3 * (real_loss + fake_loss) / 2
+                   + 5e-2 * (real_loss + fake_loss) / 2
 
         gen_loss.backward()
         gen_optimizer.step()
         
         if iteration % 100 == 0:
+            sample_time += 1
             np_dtm = dtm.cpu().detach().numpy()
             np_gen_dtm = gen_dtm.cpu().detach().numpy()
             val = Validator(np_dtm, np_gen_dtm)
             rse, ssim = val.validate()
-            writer.add_scalar('rse', total_rse, epoch * len(data_loader) // 100 + sample_time)
-            writer.add_scalar('ssim', total_ssim, epoch * len(data_loader) // 100 + sample_time)
-            sample_time += 1
+            print("step: ", (epoch - 1) * len(data_loader) // 100 + sample_time)
+            writer.add_scalar('rse', rse, (epoch - 1) * len(data_loader) // 100 + sample_time)
+            writer.add_scalar('ssim', ssim, (epoch - 1) * len(data_loader) // 100 + sample_time)
+            
         if iteration == len(data_loader):
             writer.add_images('ground_truth', dtm, epoch, dataformats='NCHW')
             writer.add_images('ori', ori, epoch, dataformats='NCHW')
