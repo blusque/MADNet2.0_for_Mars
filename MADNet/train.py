@@ -122,7 +122,7 @@ def adjust_learning_rate(epoch, type: str):
 
 
 def train(data_loader, optimizer, model, criterion, epoch):
-    global rse_data, ssim_data, epoch_data
+    global rse_data, ssim_data, epoch_data, opt
     gen_lr = adjust_learning_rate(epoch - 1, 'gen')
     dis_lr = adjust_learning_rate(epoch - 1, 'dis')
     gen_optimizer, dis_optimizer = optimizer
@@ -212,9 +212,9 @@ def train(data_loader, optimizer, model, criterion, epoch):
             np_gen_dtm = gen_dtm.cpu().detach().numpy()
             val = Validator(np_dtm, np_gen_dtm)
             rse, ssim = val.validate()
-            print("step: ", (epoch - 1) * len(data_loader) // 100 + sample_time)
-            writer.add_scalar('rse', rse, (epoch - 1) * len(data_loader) // 100 + sample_time)
-            writer.add_scalar('ssim', ssim, (epoch - 1) * len(data_loader) // 100 + sample_time)
+            step = (epoch - opt.start_epoch) * (len(data_loader) // 100) + sample_time
+            writer.add_scalar('rse', rse, step)
+            writer.add_scalar('ssim', ssim, step)
             
         if iteration == len(data_loader):
             writer.add_images('ground_truth', dtm, epoch, dataformats='NCHW')
