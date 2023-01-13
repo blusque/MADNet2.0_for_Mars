@@ -36,7 +36,7 @@ parser.add_argument("--beta1", default=0.9, type=float, help="Adam beta 1, Defau
 parser.add_argument("--beta2", default=0.999, type=float, help="Adam beta 2, Default: 0.999")
 parser.add_argument("--weight-decay", "--wd", default=1e-4, type=float, help="weight decay, Default: 1e-4")
 parser.add_argument("--pretrained", default="", type=str, help="path to pretrained model (default: none)")
-parser.add_argument("--save-per-epochs, -p", default=10, type=int, help="How many epochs the checkpoint is saved once.")
+parser.add_argument("--save-per-epochs", "-p", default=10, type=int, help="How many epochs the checkpoint is saved once.")
 
 opt = parser.parse_args()
 device = torch.device("cuda" if opt.cuda and torch.cuda.is_available() else "cpu")
@@ -73,7 +73,8 @@ def main():
         train_set = DEMDataset("G:\\training_dataset.hdf5")
     elif os.name == "posix":
         # train_set = DEMDataset("/media/mei/Elements/mini_dataset.hdf5")
-        train_set = DEMDataset("../../../data/training_dataset.hdf5")
+        train_set = DEMDataset("/mnt/g/mini_dataset.hdf5")
+        # train_set = DEMDataset("../../../data/training_dataset.hdf5")
     training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize,
                                       shuffle=True, drop_last=True)
 

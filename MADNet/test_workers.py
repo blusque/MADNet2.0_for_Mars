@@ -32,7 +32,9 @@ if os.name == 'nt':
     if __name__ == "__main__":
         check_workers("G:/training_dataset.hdf5")
 elif os.name == 'posix':
-    check_workers("/media/mei/Elements/mini_dataset.hdf5")
+    # check_workers("/media/mei/Elements/training_dataset.hdf5")
+    check_workers("/mnt/g/mini_dataset.hdf5")
+
 
 # trainset = torchvision.datasets.MNIST(
 #     root='dataset/',
