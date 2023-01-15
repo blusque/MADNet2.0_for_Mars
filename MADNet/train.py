@@ -24,7 +24,7 @@ parser = argparse.ArgumentParser(description="Pytorch MadNet 2.0 for mars")
 parser.add_argument("--batchSize", type=int, default=8, help="training batch size")
 parser.add_argument("--nEpochs", type=int, default=100, help="number of epochs to train for")
 parser.add_argument("--gen-lr", type=float, default=1e-4, help="Generator Learning Rate. Default=1e-3")
-parser.add_argument("--dis-lr", type=float, default=5e-7, help="Discriminator Learning Rate. Default=1e-5")
+parser.add_argument("--dis-lr", type=float, default=1e-6, help="Discriminator Learning Rate. Default=1e-5")
 parser.add_argument("--gen-step", type=int, default=200)
 parser.add_argument("--dis-step", type=int, default=200,
                     help="Sets the learning rate to the initial LR decayed by momentum every n epochs, Default: n=10")
@@ -228,9 +228,6 @@ def train(data_loader, optimizer, model, criterion, epoch):
             gd_loss=g_loss_value.item(),
             bh_loss=bh_loss_value.item(),
             a_loss=((real_loss + fake_loss) / 2).item())
-    print(
-        "[Epoch %d/%d]"
-        % (epoch, opt.nEpochs + opt.start_epoch - 1))
 
 
 def save_checkpoint(model, epoch):
