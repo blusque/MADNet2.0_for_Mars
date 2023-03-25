@@ -201,7 +201,7 @@ def train(data_loader, optimizer, model, criterion, epoch):
         bh_loss_value = bh_loss(dtm, gen_dtm)
         # print('g_loss: {}, bh_loss: {}, a_loss: {}'.format(g_loss_value, bh_loss_value
         #                                                    , (real_loss + fake_loss) / 2))
-        gen_loss = 500 * g_loss_value + 5 * bh_loss_value \
+        gen_loss = 500 * g_loss_value + 0.5 * bh_loss_value \
                    + 5e-2 * (real_loss + fake_loss) / 2
 
         gen_loss.backward()
