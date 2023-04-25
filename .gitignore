@@ -12,3 +12,5 @@ log/
 log*/
 MADNet.zip
 checkpoint/
+*.hdf5
+*.h5

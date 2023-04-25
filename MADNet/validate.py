@@ -173,7 +173,7 @@ def show_profile(drawer, *args):
 
 if __name__ == "__main__":
     io.use_plugin('matplotlib', 'imshow')
-    model_path = '../checkpoint/model_epoch_22.pth'
+    model_path = '../checkpoint/model_epoch_1000.pth'
     gpus = [0]
     model = Generator().to(device)
     model = DataParallel(model, device_ids=gpus)
@@ -183,7 +183,7 @@ if __name__ == "__main__":
     if os.name == "nt":
         dataset = DEMDataset("G:\\mini_dataset.hdf5")
     elif os.name == "posix":
-        dataset = DEMDataset("../validating_dataset.hdf5")
+        dataset = DEMDataset("../mini_dataset.hdf5")
         # train_set = DEMDataset("../../data/mini_dataset_for_madnet2/mini_dataset.hdf5")
     batch_size = 1
     data_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)
@@ -200,7 +200,12 @@ if __name__ == "__main__":
         show_ori = ori.numpy()
         ori = ori.to(device)
 
-        gen_dtm = model(ori).cpu().detach().numpy()
+        gen_dtm, internals = model(ori, show_internal=True)
+        gen_dtm = gen_dtm.cpu().detach().numpy()
+        for id, internal in enumerate(internals):
+            internal = internal.cpu().detach().numpy()
+            internal = np.clip(internal, -1, 1);
+            io.imsave(f"./{id}.jpg", internal, 'pil')
         # gen_dtm = 100 * np.log10(10 * gen_dtm)
         # gen_dtm /= gen_dtm.max()
         gen_dtm = np.abs(gen_dtm)
@@ -215,5 +220,5 @@ if __name__ == "__main__":
         rse, ssim = val.validate()
         show_result(show_ori, dtm, gen_dtm)
         print("total: {}; now: {}".format(len(data_loader), iteration * batch_size))
-        if iteration == 5:
+        if iteration == 1:
             break
