@@ -74,7 +74,7 @@ def main():
     elif os.name == "posix":
         train_set = DEMDataset(opt.dataset)
     training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize,
-                                      shuffle=True, drop_last=True)
+                                      shuffle=False, drop_last=True)
 
     print("===> Building Model")
     gen_model = Generator().to(device)
@@ -221,6 +221,11 @@ def train(data_loader, optimizer, model, criterion, epoch):
             writer.add_images('ground_truth', dtm, epoch, dataformats='NCHW')
             writer.add_images('ori', ori, epoch, dataformats='NCHW')
             writer.add_images('predicted', gen_dtm, epoch, dataformats='NCHW')
+            origin = ori.cpu().detach().numpy()[0, 0, ...]
+            result = gen_dtm.cpu().detach().numpy()[0, 0, ...]
+            save = np.concatenate((origin, result), axis=0)
+            plt.imsave(f'../img/epoch{epoch}.png', save)
+            
         bar.set_description('Iteration ' + str(iteration))
         bar.set_postfix(
             D_loss=dis_loss.item(), 
