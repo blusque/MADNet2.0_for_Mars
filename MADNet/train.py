@@ -71,8 +71,8 @@ def main():
     if os.name == "nt":
         train_set = DEMDataset("G:\\training_dataset.hdf5")
     elif os.name == "posix":
-        train_set = DEMDataset("/media/mei/Elements/mini_dataset.hdf5")
-        # train_set = DEMDataset("../../data/mini_dataset_for_madnet2/mini_dataset.hdf5")
+        # train_set = DEMDataset("/media/mei/Elements/mini_dataset.hdf5")
+        train_set = DEMDataset("../../../data/training_dataset.hdf5")
     training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize,
                                       shuffle=True, drop_last=True)
 
@@ -217,13 +217,14 @@ def train(data_loader, optimizer, model, criterion, epoch):
         gen_optimizer.step()
         
         if iteration % 100 == 0:
+            sample_time += 1
             np_dtm = dtm.cpu().detach().numpy()
             np_gen_dtm = gen_dtm.cpu().detach().numpy()
             val = Validator(np_dtm, np_gen_dtm)
             rse, ssim = val.validate()
-            writer.add_scalar('rse', total_rse, epoch * len(data_loader) // 100 + sample_time)
-            writer.add_scalar('ssim', total_ssim, epoch * len(data_loader) // 100 + sample_time)
-            sample_time += 1
+            writer.add_scalar('rse', rse, (epoch - 1) * len(data_loader) // 100 + sample_time)
+            writer.add_scalar('ssim', ssim, (epoch - 1) * len(data_loader) // 100 + sample_time)
+            
         if iteration == len(data_loader):
             writer.add_images('ground_truth', dtm, epoch, dataformats='NCHW')
             writer.add_images('ori', ori, epoch, dataformats='NCHW')
