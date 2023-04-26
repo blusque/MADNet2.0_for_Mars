@@ -150,17 +150,24 @@ class Generator(nn.Module):
         )
         self.on_cuda = False
 
-    def forward(self, x):
+    def forward(self, x, show_internal=False):
         # encoder arm
+        internal_image = []
+        internal_image.append(x[0, 0, ...])
         feature = self.extract(x)
+        internal_image.append(feature[0, 0, ...])
         first_pooled = self.first_pooling(feature)
         output1 = self.down1(first_pooled)
+        internal_image.append(output1[0, 0, ...])
         pooled1 = self.pooling1(output1)
         output2 = self.down2(pooled1)
+        internal_image.append(output2[0, 0, ...])
         pooled2 = self.pooling2(output2)
         output3 = self.down3(pooled2)
+        internal_image.append(output3[0, 0, ...])
         pooled3 = self.pooling3(output3)
         output4 = self.down4(pooled3)  # Nx512x16x16
+        internal_image.append(output4[0, 0, ...])
         encoder_result = self.pooling4(output4)
 
         # decoder arm
@@ -169,23 +176,32 @@ class Generator(nn.Module):
         indices1 = get_indices(output4.shape[0]
                                , output4.shape[1], 16, self.on_cuda)
         up_result1 = self.up1(encoder_result, output4, indices1)
+        internal_image.append(up_result1[0, 0, ...])
         # print(up_result1.shape)
         indices2 = get_indices(up_result1.shape[0]
                                , up_result1.shape[1] // 4, 32, self.on_cuda)
         up_result2 = self.up2(up_result1, output3, indices2)
+        internal_image.append(up_result2[0, 0, ...])
         # print(up_result2.shape)
         indices3 = get_indices(up_result2.shape[0]
                                , up_result2.shape[1] // 4, 64, self.on_cuda)
         up_result3 = self.up3(up_result2, output2, indices3)
+        internal_image.append(up_result3[0, 0, ...])
         # print(up_result3.shape)
         indices4 = get_indices(up_result3.shape[0]
                                , up_result3.shape[1] // 4, 128, self.on_cuda)
         up_result4 = self.up4(up_result3, output1, indices4)
+        internal_image.append(up_result4[0, 0, ...])
         # print(up_result4.shape)
         indices5 = get_indices(up_result4.shape[0]
                                , up_result4.shape[1] // 4, 256, self.on_cuda)
         up_result5 = self.up5(up_result4, feature, indices5)
+        internal_image.append(up_result5[0, 0, ...])
         # print(up_result5.shape)
         result = self.reconstruct(up_result5)
+        internal_image.append(result[0, 0, ...])
         # print(result.shape)
-        return result
+        if (show_internal):
+            return result, internal_image
+        else:
+            return result

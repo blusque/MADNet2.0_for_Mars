@@ -24,9 +24,9 @@ parser = argparse.ArgumentParser(description="Pytorch MadNet 2.0 for mars")
 parser.add_argument("--batchSize", type=int, default=8, help="training batch size")
 parser.add_argument("--nEpochs", type=int, default=100, help="number of epochs to train for")
 parser.add_argument("--gen-lr", type=float, default=1e-4, help="Generator Learning Rate. Default=1e-3")
-parser.add_argument("--dis-lr", type=float, default=1e-6, help="Discriminator Learning Rate. Default=1e-5")
-parser.add_argument("--gen-step", type=int, default=1000)
-parser.add_argument("--dis-step", type=int, default=1000,
+parser.add_argument("--dis-lr", type=float, default=5e-7, help="Discriminator Learning Rate. Default=1e-5")
+parser.add_argument("--gen-step", type=int, default=200)
+parser.add_argument("--dis-step", type=int, default=200,
                     help="Sets the learning rate to the initial LR decayed by momentum every n epochs, Default: n=10")
 parser.add_argument("--cuda", action="store_true", help="Use cuda?")
 parser.add_argument("--resume", default="", type=str, help="Path to checkpoint (default: none)")
@@ -35,7 +35,8 @@ parser.add_argument("--threads", type=int, default=1, help="Number of threads fo
 parser.add_argument("--beta1", default=0.9, type=float, help="Adam beta 1, Default: 0.9")
 parser.add_argument("--beta2", default=0.999, type=float, help="Adam beta 2, Default: 0.999")
 parser.add_argument("--weight-decay", "--wd", default=1e-4, type=float, help="weight decay, Default: 1e-4")
-parser.add_argument("--pretrained", default="", type=str, help="path to pretrained model (default: none)")
+parser.add_argument("--save-per-epochs", "-p", default=10, type=int, help="How many epochs the checkpoint is saved once.")
+parser.add_argument("--dataset", "-d", default="", type=str, help="Path to Dataset")
 
 opt = parser.parse_args()
 device = torch.device("cuda" if opt.cuda and torch.cuda.is_available() else "cpu")
@@ -69,12 +70,11 @@ def main():
     print("===> Loading datasets")
     train_set = None
     if os.name == "nt":
-        train_set = DEMDataset("G:\\training_dataset.hdf5")
+        train_set = DEMDataset(opt.dataset)
     elif os.name == "posix":
-        # train_set = DEMDataset("/media/mei/Elements/mini_dataset.hdf5")
-        train_set = DEMDataset("../../../data/training_dataset.hdf5")
+        train_set = DEMDataset(opt.dataset)
     training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize,
-                                      shuffle=True, drop_last=True)
+                                      shuffle=False, drop_last=True)
 
     print("===> Building Model")
     gen_model = Generator().to(device)
@@ -96,16 +96,6 @@ def main():
         else:
             print("=> no checkpoint fount at {}".format(opt.resume))
 
-    if opt.pretrained:
-        if os.path.isfile(opt.pretrained):
-            print("=>loading model {}".format(opt.pretrained))
-            checkpoint = torch.load(opt.pretrained)
-            opt.start_epoch = checkpoint['epoch'] + 1
-            gen_model.load_state_dict(checkpoint['gen_model'].state_dict())
-            dis_model.load_state_dict(checkpoint['dis_model'].state_dict())
-        else:
-            print("=> no model fount at {}".format(opt.pretrained))
-
     print("===> Setting Optimizer")
     betas = (opt.beta1, opt.beta2)
     gen_optimizer = torch.optim.Adam(gen_model.parameters(), lr=opt.gen_lr, betas=betas)
@@ -118,7 +108,7 @@ def main():
               (gen_model, dis_model),
               (g_loss, bh_loss, a_loss),
               epoch)
-        if epoch % 10 == 0:
+        if epoch % opt.save_per_epochs == 0:
             save_checkpoint((gen_model, dis_model),epoch)
 
 
@@ -132,7 +122,7 @@ def adjust_learning_rate(epoch, type: str):
 
 
 def train(data_loader, optimizer, model, criterion, epoch):
-    global rse_data, ssim_data, epoch_data
+    global rse_data, ssim_data, epoch_data, opt
     gen_lr = adjust_learning_rate(epoch - 1, 'gen')
     dis_lr = adjust_learning_rate(epoch - 1, 'dis')
     gen_optimizer, dis_optimizer = optimizer
@@ -143,7 +133,8 @@ def train(data_loader, optimizer, model, criterion, epoch):
     for param_group in dis_optimizer.param_groups:
         param_group['lr'] = dis_lr
 
-    print("Epoch={}, gen_lr={}, dis_lr={}".format(epoch, gen_lr, dis_lr))
+    print("[Epoch %d/%d] " % (epoch, opt.nEpochs + opt.start_epoch - 1),
+          "gen_lr={}, dis_lr={}".format(gen_lr, dis_lr))
 
     gen_model, dis_model = model
 
@@ -156,7 +147,7 @@ def train(data_loader, optimizer, model, criterion, epoch):
     
     total_rse = 0.
     total_ssim = 0.
-    bar = tqdm(enumerate(data_loader, 1), leave=True, total=len(data_loader))
+    bar = tqdm(enumerate(data_loader, 1), leave=False, total=len(data_loader))
     bar.set_description('Iteration ' + str(0))
     bar.set_postfix(
         D_loss=None, 
@@ -210,8 +201,8 @@ def train(data_loader, optimizer, model, criterion, epoch):
         bh_loss_value = bh_loss(dtm, gen_dtm)
         # print('g_loss: {}, bh_loss: {}, a_loss: {}'.format(g_loss_value, bh_loss_value
         #                                                    , (real_loss + fake_loss) / 2))
-        gen_loss = 500 * g_loss_value + 5 * bh_loss_value \
-                   + 5e-3 * (real_loss + fake_loss) / 2
+        gen_loss = 500 * g_loss_value + 0.5 * bh_loss_value \
+                   + 5e-2 * (real_loss + fake_loss) / 2
 
         gen_loss.backward()
         gen_optimizer.step()
@@ -222,13 +213,19 @@ def train(data_loader, optimizer, model, criterion, epoch):
             np_gen_dtm = gen_dtm.cpu().detach().numpy()
             val = Validator(np_dtm, np_gen_dtm)
             rse, ssim = val.validate()
-            writer.add_scalar('rse', rse, (epoch - 1) * len(data_loader) // 100 + sample_time)
-            writer.add_scalar('ssim', ssim, (epoch - 1) * len(data_loader) // 100 + sample_time)
+            step = (epoch - opt.start_epoch) * (len(data_loader) // 100) + sample_time
+            writer.add_scalar('rse', rse, step)
+            writer.add_scalar('ssim', ssim, step)
             
         if iteration == len(data_loader):
             writer.add_images('ground_truth', dtm, epoch, dataformats='NCHW')
             writer.add_images('ori', ori, epoch, dataformats='NCHW')
             writer.add_images('predicted', gen_dtm, epoch, dataformats='NCHW')
+            origin = ori.cpu().detach().numpy()[0, 0, ...]
+            result = gen_dtm.cpu().detach().numpy()[0, 0, ...]
+            save = np.concatenate((origin, result), axis=0)
+            plt.imsave(f'../img/epoch{epoch}.png', save)
+            
         bar.set_description('Iteration ' + str(iteration))
         bar.set_postfix(
             D_loss=dis_loss.item(), 
