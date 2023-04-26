@@ -68,11 +68,7 @@ def main():
     cudnn.benchmark = True
 
     print("===> Loading datasets")
-    train_set = None
-    if os.name == "nt":
-        train_set = DEMDataset(opt.dataset)
-    elif os.name == "posix":
-        train_set = DEMDataset(opt.dataset)
+    train_set = DEMDataset(opt.dataset)
     training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize,
                                       shuffle=False, drop_last=True)
 
@@ -207,7 +203,7 @@ def train(data_loader, optimizer, model, criterion, epoch):
         gen_loss.backward()
         gen_optimizer.step()
         
-        if iteration % 100 == 0:
+        if iteration % 2 == 0:
             sample_time += 1
             np_dtm = dtm.cpu().detach().numpy()
             np_gen_dtm = gen_dtm.cpu().detach().numpy()
@@ -221,10 +217,11 @@ def train(data_loader, optimizer, model, criterion, epoch):
             writer.add_images('ground_truth', dtm, epoch, dataformats='NCHW')
             writer.add_images('ori', ori, epoch, dataformats='NCHW')
             writer.add_images('predicted', gen_dtm, epoch, dataformats='NCHW')
-            origin = ori.cpu().detach().numpy()[0, 0, ...]
-            result = gen_dtm.cpu().detach().numpy()[0, 0, ...]
-            save = np.concatenate((origin, result), axis=0)
-            plt.imsave(f'../img/epoch{epoch}.png', save)
+            if epoch % 10 == 0:
+                origin = ori.cpu().detach().numpy()[0, 0, ...]
+                result = gen_dtm.cpu().detach().numpy()[0, 0, ...]
+                save = np.concatenate((origin, result), axis=0)
+                plt.imsave(f'../img/epoch{epoch}.png', save, cmap='gray')
             
         bar.set_description('Iteration ' + str(iteration))
         bar.set_postfix(
