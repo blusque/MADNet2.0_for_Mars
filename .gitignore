@@ -14,3 +14,4 @@ MADNet.zip
 checkpoint/
 *.hdf5
 *.h5
+.vscode/

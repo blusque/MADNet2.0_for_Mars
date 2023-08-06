@@ -11,10 +11,8 @@ class ConvBlock_(nn.Module):
         self.conv = nn.Sequential(
             nn.BatchNorm2d(in_channels),
             nn.LeakyReLU(0.1, inplace=True),
-            nn.Conv2d(in_channels, out_channels
-                      , kernel_size=kernel_size
-                      , stride=stride
-                      , padding=padding)
+            nn.Conv2d(in_channels, out_channels,
+                      kernel_size=kernel_size, stride=stride, padding=padding)
         )
 
     def forward(self, x):
@@ -25,36 +23,33 @@ class ConvBlock_(nn.Module):
 class DenseBlock(nn.Module):
     """Conv * 5 and dense connect"""
 
-    def __init__(self, in_channels, out_channels, k):
+    def __init__(self, in_channels, out_channels, k, times=5):
         super(DenseBlock, self).__init__()
-        self.conv1 = ConvBlock_(in_channels, k)
-        self.conv2 = ConvBlock_(in_channels + k * 1, k)
-        self.conv3 = ConvBlock_(in_channels + k * 2, k)
-        self.conv4 = ConvBlock_(in_channels + k * 3, k)
-        self.conv5 = ConvBlock_(in_channels + k * 4, out_channels)
+        self.convs = nn.ModuleList()
+        for i in range(times):
+            if i == times - 1:
+                self.convs.append(ConvBlock_(in_channels + i * k, out_channels))
+            else:
+                self.convs.append(ConvBlock_(in_channels + i * k, k))
 
     def forward(self, x):
-        input1 = x
-        output1 = self.conv1(input1)
-        input2 = torch.cat((output1, x), 1)
-        output2 = self.conv2(input2)
-        input3 = torch.cat((output2, output1, x), 1)
-        output3 = self.conv3(input3)
-        input4 = torch.cat((output3, output2, output1, x), 1)
-        output4 = self.conv4(input4)
-        input5 = torch.cat((output4, output3, output2, output1, x), 1)
-        output5 = self.conv5(input5)
-        return output5
+        input = x
+        outputs = [x]
+        for conv in self.convs:
+            outputs.insert(0, conv(input))
+            input = torch.cat(outputs, 1)
+        return outputs[0]
 
 
 class Down(nn.Module):
     """Encoder arm blocks"""
 
-    def __init__(self, in_channels, out_channels, k):
+    def __init__(self, in_channels, out_channels, k, times=5):
         super(Down, self).__init__()
         self.down = nn.Sequential(
-            DenseBlock(in_channels, in_channels, k),
-            ConvBlock_(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
+            DenseBlock(in_channels, in_channels, k, times),
+            ConvBlock_(in_channels, out_channels,
+                       kernel_size=1, stride=1, padding=0)
         )
 
     def forward(self, x):
@@ -71,11 +66,14 @@ class UPB(nn.Module):
         super(UPB, self).__init__()
         self.up = nn.MaxUnpool2d(kernel_size=2, stride=2)
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=5, stride=1, padding=2),
+            nn.Conv2d(in_channels, out_channels,
+                      kernel_size=5, stride=1, padding=2),
             nn.LeakyReLU(1e-2, inplace=True),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+            nn.Conv2d(out_channels, out_channels,
+                      kernel_size=3, stride=1, padding=1)
         )
-        self.shortcut = nn.Conv2d(in_channels, out_channels, kernel_size=5, stride=1, padding=2)
+        self.shortcut = nn.Conv2d(
+            in_channels, out_channels, kernel_size=5, stride=1, padding=2)
 
     def forward(self, x, indices):
         unpooled = self.up(x, indices)
@@ -90,7 +88,8 @@ class Up(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(Up, self).__init__()
         self.conv = nn.Sequential(
-            ConvBlock_(in_channels, out_channels, kernel_size=3, stride=1, padding=1),
+            ConvBlock_(in_channels, out_channels,
+                       kernel_size=3, stride=1, padding=1),
             nn.LeakyReLU(1e-2, inplace=True)
         )
         self.up = UPB(out_channels, out_channels)
@@ -103,11 +102,10 @@ class Up(nn.Module):
 
 
 def get_indices(batch_size, input_channels, input_size, cuda):
-    indices = torch.tensor([[
-        [
-            [(input_size * j * 2 + i) * 2 for i in range(input_size)]
-            for j in range(input_size)
-        ]
+    indices = torch.tensor([[[
+        [(input_size * j * 2 + i) * 2 for i in range(input_size)]
+        for j in range(input_size)
+    ]
         for s in range(input_channels)
     ]
         for t in range(batch_size)], dtype=torch.int64)
@@ -119,89 +117,86 @@ def get_indices(batch_size, input_channels, input_size, cuda):
 class Generator(nn.Module):
     """encoder arm plus decoder arm"""
 
-    def __init__(self):
+    def __init__(self, init_dims=32,
+                 down_scales=[2, 4, 8, 16],
+                 image_size=512,
+                 dense_k=12, dense_times=5):
         super(Generator, self).__init__()
+        self.image_sizes = []
+        for i in range(len(down_scales) + 1):
+            self.image_sizes.append(image_size // 2 ** (i + 1))
         # down arm(encoder)
         self.extract = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(32),
+            nn.Conv2d(1, init_dims, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(init_dims),
             nn.LeakyReLU(1e-2, inplace=True)
         )
         self.first_pooling = nn.MaxPool2d(3, stride=2, padding=1)
-        self.down1 = Down(32, 64, 12)
-        self.pooling1 = nn.MaxPool2d(2, stride=2)
-        self.down2 = Down(64, 128, 12)
-        self.pooling2 = nn.MaxPool2d(2, stride=2)
-        self.down3 = Down(128, 256, 12)
-        self.pooling3 = nn.MaxPool2d(2, stride=2)
-        self.down4 = Down(256, 512, 12)
-        self.pooling4 = nn.MaxPool2d(2, stride=2)
+        self.down_arm = nn.ModuleList()
+        self.down_pooling = nn.MaxPool2d(2, stride=2)
+        for i, scale in enumerate(down_scales):
+            if i == 0:
+                self.down_arm.append(Down(init_dims,
+                                              scale * init_dims, dense_k))
+            else:
+                self.down_arm.append(Down(down_scales[i - 1] * init_dims,
+                                              scale * init_dims, dense_k))
 
         # up arm(decoder)
-        self.up1 = Up(512, 512)
-        self.up2 = Up(1024, 256)
-        self.up3 = Up(512, 128)
-        self.up4 = Up(256, 64)
-        self.up5 = Up(128, 32)
+        self.up_arm = nn.ModuleList()
+        for i, scales in enumerate(down_scales[::-1]):
+            if i == 0:
+                self.up_arm.append(
+                    Up(scales * init_dims, scales * init_dims))
+            else:
+                self.up_arm.append(
+                    Up(2 * down_scales[-i] * init_dims, scales * init_dims))
+        self.up_arm.append(Up(2 * down_scales[0] * init_dims, init_dims))
         self.reconstruct = nn.Sequential(
-            nn.BatchNorm2d(64),
-            nn.Conv2d(64, 1, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(2 * init_dims),
+            nn.Conv2d(2 * init_dims, 1, kernel_size=3, stride=1, padding=1),
             nn.LeakyReLU(1e-2, inplace=True)
         )
         self.on_cuda = False
 
     def forward(self, x, show_internal=False):
         # encoder arm
-        internal_image = []
-        internal_image.append(x[0, 0, ...])
+        internal_image = None
+        if show_internal:
+            internal_image = []
+            internal_image.append(x[0, 0, ...])
         feature = self.extract(x)
-        internal_image.append(feature[0, 0, ...])
-        first_pooled = self.first_pooling(feature)
-        output1 = self.down1(first_pooled)
-        internal_image.append(output1[0, 0, ...])
-        pooled1 = self.pooling1(output1)
-        output2 = self.down2(pooled1)
-        internal_image.append(output2[0, 0, ...])
-        pooled2 = self.pooling2(output2)
-        output3 = self.down3(pooled2)
-        internal_image.append(output3[0, 0, ...])
-        pooled3 = self.pooling3(output3)
-        output4 = self.down4(pooled3)  # Nx512x16x16
-        internal_image.append(output4[0, 0, ...])
-        encoder_result = self.pooling4(output4)
+        outputs = [feature]
+        if show_internal:
+            internal_image.append(feature[0, 0, ...])
+        pooled = self.first_pooling(feature)
+        for down in self.down_arm:
+            output = down(pooled)
+            outputs.insert(0, output)
+            if show_internal:
+                internal_image.append(output[0, 0, ...])
+            pooled = self.down_pooling(output)
+        up_input = pooled
 
         # decoder arm
-        if output1.is_cuda:
+        if feature.is_cuda:
             self.on_cuda = True
-        indices1 = get_indices(output4.shape[0]
-                               , output4.shape[1], 16, self.on_cuda)
-        up_result1 = self.up1(encoder_result, output4, indices1)
-        internal_image.append(up_result1[0, 0, ...])
-        # print(up_result1.shape)
-        indices2 = get_indices(up_result1.shape[0]
-                               , up_result1.shape[1] // 4, 32, self.on_cuda)
-        up_result2 = self.up2(up_result1, output3, indices2)
-        internal_image.append(up_result2[0, 0, ...])
-        # print(up_result2.shape)
-        indices3 = get_indices(up_result2.shape[0]
-                               , up_result2.shape[1] // 4, 64, self.on_cuda)
-        up_result3 = self.up3(up_result2, output2, indices3)
-        internal_image.append(up_result3[0, 0, ...])
-        # print(up_result3.shape)
-        indices4 = get_indices(up_result3.shape[0]
-                               , up_result3.shape[1] // 4, 128, self.on_cuda)
-        up_result4 = self.up4(up_result3, output1, indices4)
-        internal_image.append(up_result4[0, 0, ...])
-        # print(up_result4.shape)
-        indices5 = get_indices(up_result4.shape[0]
-                               , up_result4.shape[1] // 4, 256, self.on_cuda)
-        up_result5 = self.up5(up_result4, feature, indices5)
-        internal_image.append(up_result5[0, 0, ...])
+        for i, (output, up, img_size) in enumerate(zip(outputs, self.up_arm, self.image_sizes[::-1])):
+            if i == 0:
+                indices = get_indices(
+                    output.shape[0], output.shape[1], img_size, self.on_cuda)
+            else:
+                indices = get_indices(
+                    up_input.shape[0], up_input.shape[1] // 4, img_size, self.on_cuda)
+            up_input = up(up_input, output, indices)
+            if show_internal:
+                internal_image.append(up_input[0, 0, ...])
         # print(up_result5.shape)
-        result = self.reconstruct(up_result5)
-        internal_image.append(result[0, 0, ...])
+        result = self.reconstruct(up_input)
+        if show_internal:
+            internal_image.append(result[0, 0, ...])
         # print(result.shape)
-        if (show_internal):
+        if show_internal:
             return result, internal_image
         else:
             return result

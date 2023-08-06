@@ -209,9 +209,11 @@ def train(data_loader, optimizer, model, criterion, epoch):
             np_gen_dtm = gen_dtm.cpu().detach().numpy()
             val = Validator(np_dtm, np_gen_dtm)
             rse, ssim = val.validate()
-            step = (epoch - opt.start_epoch) * (len(data_loader) // 100) + sample_time
+            step = (epoch - opt.start_epoch) * len(data_loader) + sample_time % len(data_loader) * 2
             writer.add_scalar('rse', rse, step)
             writer.add_scalar('ssim', ssim, step)
+            writer.add_scalar('g-loss', gen_loss)
+            writer.add_scalar('d-loss', dis_loss)
             
         if iteration == len(data_loader):
             writer.add_images('ground_truth', dtm, epoch, dataformats='NCHW')
