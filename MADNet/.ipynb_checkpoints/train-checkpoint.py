@@ -24,7 +24,7 @@ parser = argparse.ArgumentParser(description="Pytorch MadNet 2.0 for mars")
 parser.add_argument("--batchSize", type=int, default=8, help="training batch size")
 parser.add_argument("--nEpochs", type=int, default=100, help="number of epochs to train for")
 parser.add_argument("--gen-lr", type=float, default=1e-4, help="Generator Learning Rate. Default=1e-3")
-parser.add_argument("--dis-lr", type=float, default=5e-7, help="Discriminator Learning Rate. Default=1e-5")
+parser.add_argument("--dis-lr", type=float, default=1e-6, help="Discriminator Learning Rate. Default=1e-5")
 parser.add_argument("--gen-step", type=int, default=200)
 parser.add_argument("--dis-step", type=int, default=200,
                     help="Sets the learning rate to the initial LR decayed by momentum every n epochs, Default: n=10")
@@ -68,11 +68,7 @@ def main():
     cudnn.benchmark = True
 
     print("===> Loading datasets")
-    train_set = None
-    if os.name == "nt":
-        train_set = DEMDataset(opt.dataset)
-    elif os.name == "posix":
-        train_set = DEMDataset(opt.dataset)
+    train_set = DEMDataset(opt.dataset)
     training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize,
                                       shuffle=False, drop_last=True)
 
@@ -201,19 +197,19 @@ def train(data_loader, optimizer, model, criterion, epoch):
         bh_loss_value = bh_loss(dtm, gen_dtm)
         # print('g_loss: {}, bh_loss: {}, a_loss: {}'.format(g_loss_value, bh_loss_value
         #                                                    , (real_loss + fake_loss) / 2))
-        gen_loss = 500 * g_loss_value + 0.5 * bh_loss_value \
-                   + 5e-2 * (real_loss + fake_loss) / 2
+        gen_loss = 500 * g_loss_value + 5 * bh_loss_value \
+                   + 5e-3 * (real_loss + fake_loss) / 2
 
         gen_loss.backward()
         gen_optimizer.step()
         
-        if iteration % 100 == 0:
+        if iteration % 2 == 0:
             sample_time += 1
             np_dtm = dtm.cpu().detach().numpy()
             np_gen_dtm = gen_dtm.cpu().detach().numpy()
             val = Validator(np_dtm, np_gen_dtm)
             rse, ssim = val.validate()
-            step = (epoch - opt.start_epoch) * (len(data_loader) // 100) + sample_time
+            step = (epoch - opt.start_epoch) * (len(data_loader) // 2) + sample_time
             writer.add_scalar('rse', rse, step)
             writer.add_scalar('ssim', ssim, step)
             
@@ -221,10 +217,11 @@ def train(data_loader, optimizer, model, criterion, epoch):
             writer.add_images('ground_truth', dtm, epoch, dataformats='NCHW')
             writer.add_images('ori', ori, epoch, dataformats='NCHW')
             writer.add_images('predicted', gen_dtm, epoch, dataformats='NCHW')
-            origin = ori.cpu().detach().numpy()[0, 0, ...]
-            result = gen_dtm.cpu().detach().numpy()[0, 0, ...]
-            save = np.concatenate((origin, result), axis=0)
-            plt.imsave(f'../img/epoch{epoch}.png', save)
+            if epoch % 10 == 0:
+                origin = ori.cpu().detach().numpy()[0, 0, ...]
+                result = gen_dtm.cpu().detach().numpy()[0, 0, ...]
+                save = np.concatenate((origin, result), axis=0)
+                plt.imsave(f'../img/epoch{epoch}.png', save, cmap='gray')
             
         bar.set_description('Iteration ' + str(iteration))
         bar.set_postfix(
