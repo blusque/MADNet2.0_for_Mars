@@ -70,7 +70,7 @@ def main():
     print("===> Loading datasets")
     train_set = DEMDataset(opt.dataset)
     training_data_loader = DataLoader(dataset=train_set, num_workers=opt.threads, batch_size=opt.batchSize,
-                                      shuffle=False, drop_last=True)
+                                      shuffle=True, drop_last=True)
 
     print("===> Building Model")
     gen_model = Generator().to(device)
@@ -200,25 +200,25 @@ def train(data_loader, optimizer, model, criterion, epoch):
         bh_loss_value = bh_loss(dtm, gen_dtm)
         # print('g_loss: {}, bh_loss: {}, a_loss: {}'.format(g_loss_value, bh_loss_value
         #                                                    , (real_loss + fake_loss) / 2))
-        gen_loss = 500 * g_loss_value + 5 * bh_loss_value \
-                   + 5e-2 * fake_loss
+        gen_loss = 50 * g_loss_value + 5 * bh_loss_value \
+                   + 0.5 * fake_loss
 
         gen_loss.backward()
         gen_optimizer.step()
         
-        if iteration % 10 == 0:
+        if iteration % 2 == 0:
             sample_time += 1
             np_dtm = dtm.cpu().detach().numpy()
             np_gen_dtm = gen_dtm.cpu().detach().numpy()
             val = Validator(np_dtm, np_gen_dtm)
             rse, ssim = val.validate()
-            step = (epoch - opt.start_epoch) * len(data_loader) + sample_time % len(data_loader) * 10
+            step = (epoch - opt.start_epoch) * len(data_loader) + sample_time % len(data_loader) * 2
             writer.add_scalar('rse', rse, step)
             writer.add_scalar('ssim', ssim, step)
             writer.add_scalar('g-loss', gen_loss, step)
             writer.add_scalar('d-loss', dis_loss, step)
-            writer.add_scalar('real predict', real_predict, step)
-            writer.add_scalar('fake predict', fake_predict, step)
+            writer.add_scalar('real predict', real_predict.mean(0), step)
+            writer.add_scalar('fake predict', fake_predict.mean(0), step)
             
         if iteration == len(data_loader):
             writer.add_images('ground_truth', dtm, epoch, dataformats='NCHW')
