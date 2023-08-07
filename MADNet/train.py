@@ -116,6 +116,9 @@ def adjust_learning_rate(epoch, type: str):
         lr = opt.dis_lr * (0.1 ** ((epoch - opt.start_epoch + 1) // opt.dis_step))
     return lr
 
+def generate_noise(*args, **kwargs):
+    pass
+
 
 def train(data_loader, optimizer, model, criterion, epoch):
     global rse_data, ssim_data, epoch_data, opt
@@ -190,7 +193,7 @@ def train(data_loader, optimizer, model, criterion, epoch):
 
         real_predict = dis_model(dtm, ori).detach()
         fake_predict = dis_model(gen_dtm, ori)
-        real_loss = a_loss(real_predict - fake_predict.mean(0, keepdim=True), fake)
+        # real_loss = a_loss(real_predict - fake_predict.mean(0, keepdim=True), fake)
         fake_loss = a_loss(fake_predict - real_predict.mean(0, keepdim=True), valid)
         
         g_loss_value = g_loss(dtm, gen_dtm)
@@ -198,7 +201,7 @@ def train(data_loader, optimizer, model, criterion, epoch):
         # print('g_loss: {}, bh_loss: {}, a_loss: {}'.format(g_loss_value, bh_loss_value
         #                                                    , (real_loss + fake_loss) / 2))
         gen_loss = 500 * g_loss_value + 5 * bh_loss_value \
-                   + 5e-3 * (real_loss + fake_loss) / 2
+                   + 5e-2 * fake_loss
 
         gen_loss.backward()
         gen_optimizer.step()

@@ -57,9 +57,12 @@ class Discriminator(nn.Module):
             ConvBlock_(256, 512),
             ConvBlock_(512, 512, 2)
         )
-        self.fc1 = nn.Linear(512 * 32 * 32, 10)
-        self.lrelu = nn.LeakyReLU(1e-2, inplace=True)
-        self.fc2 = nn.Linear(10, 1)
+        self.fc = nn.Sequential(
+            nn.Linear(512 * 32 * 32, 10),
+            nn.LeakyReLU(1e-2, inplace=True),
+            nn.Linear(10, 1),
+            nn.Sigmoid()
+        )
 
     def forward(self, x_h, x_i):
         # print("x_h size: ", x_h.shape)
@@ -70,7 +73,5 @@ class Discriminator(nn.Module):
         # print(output.shape)
         output = output.view(-1, 512 * 32 * 32)
         # print(output.shape)
-        vector1 = self.fc1(output)
-        relu = self.lrelu(vector1)
-        result = self.fc2(relu)
+        result = self.fc(output)
         return result

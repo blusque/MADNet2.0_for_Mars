@@ -155,7 +155,7 @@ class Generator(nn.Module):
         self.reconstruct = nn.Sequential(
             nn.BatchNorm2d(2 * init_dims),
             nn.Conv2d(2 * init_dims, 1, kernel_size=3, stride=1, padding=1),
-            nn.LeakyReLU(1e-2, inplace=True)
+            nn.Sigmoid()
         )
         self.on_cuda = False
 
