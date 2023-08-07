@@ -214,6 +214,8 @@ def train(data_loader, optimizer, model, criterion, epoch):
             writer.add_scalar('ssim', ssim, step)
             writer.add_scalar('g-loss', gen_loss, step)
             writer.add_scalar('d-loss', dis_loss, step)
+            writer.add_scalar('real predict', real_predict, step)
+            writer.add_scalar('fake predict', fake_predict, step)
             
         if iteration == len(data_loader):
             writer.add_images('ground_truth', dtm, epoch, dataformats='NCHW')
