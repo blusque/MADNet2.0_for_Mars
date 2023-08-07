@@ -116,6 +116,8 @@ def adjust_learning_rate(epoch, type: str):
         lr = opt.dis_lr * (0.1 ** ((epoch - opt.start_epoch + 1) // opt.dis_step))
     return lr
 
+def generate_noise(*args, **kwargs):
+    pass
 
 def train(data_loader, optimizer, model, criterion, epoch):
     global rse_data, ssim_data, epoch_data, opt
@@ -164,6 +166,8 @@ def train(data_loader, optimizer, model, criterion, epoch):
         valid = Variable(Tensor(dtm.shape[0], 1).fill_(1.0), requires_grad=False)
         fake = Variable(Tensor(dtm.shape[0], 1).fill_(0.0), requires_grad=False)
         gen_dtm = gen_model(ori)
+        noise = generate_noise(gen_dtm, epoch, iteration)
+        noised_gen_dtm = gen_dtm + noise
         # ---------------------
         #  Train Discriminator
         # ---------------------
@@ -171,7 +175,7 @@ def train(data_loader, optimizer, model, criterion, epoch):
         dis_optimizer.zero_grad()
         
         real_predict = dis_model(dtm, ori)
-        fake_predict = dis_model(gen_dtm.detach(), ori)
+        fake_predict = dis_model(noised_gen_dtm.detach(), ori)
         real_loss = a_loss(real_predict - fake_predict.mean(0, keepdim=True), valid)
         fake_loss = a_loss(fake_predict - real_predict.mean(0, keepdim=True), fake)
 
@@ -189,7 +193,7 @@ def train(data_loader, optimizer, model, criterion, epoch):
         # z = Variable(Tensor(np.random.normal(0, 1, (dtm.shape[0], 1, 512, 512))))
 
         real_predict = dis_model(dtm, ori).detach()
-        fake_predict = dis_model(gen_dtm, ori)
+        fake_predict = dis_model(noised_gen_dtm, ori)
         real_loss = a_loss(real_predict - fake_predict.mean(0, keepdim=True), fake)
         fake_loss = a_loss(fake_predict - real_predict.mean(0, keepdim=True), valid)
         
